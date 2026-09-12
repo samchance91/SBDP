@@ -5,8 +5,12 @@ import { t, setLang, getLang, LANGS, needsReview } from './i18n.js';
 import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js';
 import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js';
 import * as Share from './share.js';
+import * as Auth from './auth.js';
+import * as Local from './local.js';
 
 const db = makeAdapter();
+// No-account persistence: writes autosave to this device.
+if (db.mode === 'preview') db._onPersist = (s) => Local.saveLocal(s);
 const app = document.getElementById('app');
 const state = { group: 'g_goa', calcTarget: null, recorder: null, focusReturn: null };
 
@@ -41,7 +45,7 @@ function shell(active, content, { title = '', subtitle = '', action = '' } = {})
     <div class="bottom">
       <a href="#/language" class="nav-util row" style="padding:10px 14px;color:var(--muted);font-size:13px">${icon('globe')}<span>${esc(LANGS.find((l) => l.code === getLang()).native)}</span></a>
       <div class="rule"></div>
-      <div class="row">${avatarOf('u_sam')}<div><strong style="font-size:13px">Sam</strong><div class="small muted">Preview session</div></div></div>
+      ${sidebarUser()}
     </div>
   </aside>`;
 
@@ -53,8 +57,36 @@ function shell(active, content, { title = '', subtitle = '', action = '' } = {})
   const titleBar = title ? `<div class="title"><div><h1>${esc(title)}</h1>${subtitle ? `<p>${esc(subtitle)}</p>` : ''}</div>${action}</div>` : '';
 
   return `${sidebar}<main class="app">${mobileHead}
-    <div class="top"><div class="row">${reviewBadge()}</div><a class="link" href="#/gallery">${icon('info')} Prototype gallery</a></div>
+    <div class="top"><div class="row">${reviewBadge()}${Auth.isSignedIn() ? `<span class="pill">${icon('check')}&nbsp;Signed in</span>` : ''}</div>
+      <div class="row" style="gap:14px">${saveButton()}<a class="link" href="#/gallery">${icon('info')} Prototype gallery</a></div></div>
+    ${localBar()}
     <div class="content">${titleBar}${content}</div></main>${bottomnav}`;
+}
+
+function sidebarUser() {
+  const u = Auth.currentUser();
+  if (u) {
+    const av = u.avatar ? `<img src="${esc(u.avatar)}" alt="" width="34" height="34" style="border-radius:50%">` : `<span class="avatar you">${esc((u.name || '?').slice(0, 2).toUpperCase())}</span>`;
+    return `<div class="row">${av}<div><strong style="font-size:13px">${esc(u.name)}</strong><div class="small muted">${esc(u.email || '')}</div></div></div>`;
+  }
+  const label = db.localMode ? 'On this device' : 'Preview session';
+  return `<div class="row">${avatarOf('u_sam')}<div><strong style="font-size:13px">Sam</strong><div class="small muted">${esc(label)}</div></div></div>`;
+}
+
+// Save-a-copy button appears in no-account/local mode (and whenever offline).
+function saveButton() {
+  if (!db.localMode && Local.isOnline()) return '';
+  return `<button class="link" data-act="save" style="background:none;border:0;padding:0">${icon('arrowUpRight')} ${esc(t('saveSession'))}</button>`;
+}
+
+// A quiet banner explaining local/offline mode, with a Save action.
+function localBar() {
+  const offline = !Local.isOnline();
+  if (!db.localMode && !offline) return '';
+  const msg = offline ? t('offlineBody') : t('localDisclaimer');
+  return `<div class="content" style="padding-bottom:0"><div class="notice" style="margin-top:20px">${icon('info')}
+    <div class="row between" style="flex:1;gap:12px"><span>${esc(offline ? t('offlineTitle') + ' — ' : '')}${esc(msg)}</span>
+    <button class="btn secondary" data-act="save" style="min-height:36px">${esc(t('saveSession'))}</button></div></div></div>`;
 }
 
 // ---- screens ---------------------------------------------------------------
@@ -73,12 +105,13 @@ screens.login = () => {
         <h1>${esc(t('benefit'))}</h1>
         <p>Split a bill four ways, track who paid, and settle up — without the spreadsheet.</p>
         <button class="btn google" id="gbtn"><img src="assets/google-g.png" alt="">${esc(t('continueGoogle'))}</button>
+        <button class="btn secondary wide" id="noacct" style="margin-top:12px">${esc(t('useWithoutAccount'))}</button>
         <div class="row" style="gap:16px;margin-top:20px">
           <a class="link" href="#/language">${icon('globe')} ${esc(LANGS.find((l) => l.code === getLang()).native)}</a>
           <a class="link" href="#/home" id="quick">${esc(t('tryQuick'))} ${icon('arrowUpRight')}</a>
         </div>
         <div class="notice" id="authnote" hidden></div>
-        <p class="fine" style="margin-top:28px">SBDP uses Google sign-in. We only request your name and email. This preview does not contact Google — “${esc(t('tryQuick'))}” opens sample data.</p>
+        <p class="fine" style="margin-top:28px">SBDP uses Google sign-in. We only request your name and email.${Auth.configured() ? ' Your account is created automatically on first sign-in.' : ` This preview isn’t connected to Google — “${esc(t('tryQuick'))}” opens sample data.`}</p>
       </div>
     </div>
     <div class="login-right">${lockup(false)}${example}</div>
@@ -95,12 +128,23 @@ screens.login = () => {
     const [h, b] = map[kind]; note.hidden = false;
     note.innerHTML = `${icon('info')}<div><strong>${esc(h)}</strong><div>${esc(b)}</div></div>`;
   };
-  $('#gbtn').onclick = () => {
-    if (db.mode === 'supabase') { showState('redirect'); /* real OAuth kicks in via adapter */ return; }
+  $('#gbtn').onclick = async () => {
+    if (Auth.configured()) {
+      showState('redirect');
+      try { await Auth.signInWithGoogle(state.afterLogin || '#/home'); }
+      catch (e) { showState('failed'); }
+      return;
+    }
     // Preview: DO NOT pretend Google auth succeeded.
     note.hidden = false;
     note.innerHTML = `${icon('info')}<div><strong>Preview build — Google is not connected.</strong>
-      <div>Real Google sign-in activates only with configured Supabase credentials. Use “${esc(t('tryQuick'))}” to explore sample data.</div></div>`;
+      <div>Real Google sign-in activates only with configured Supabase credentials (see SETUP.md). Use “${esc(t('tryQuick'))}” to explore sample data.</div></div>`;
+  };
+  $('#noacct').onclick = () => {
+    db.enableLocal(Local.loadLocal());
+    state.noAccount = true;
+    toast(t('localDisclaimer'), 4200);
+    go('#/home');
   };
   // Deep-link states for review: #/login?state=cancelled etc.
   const st = new URLSearchParams(location.hash.split('?')[1] || '').get('state');
@@ -212,10 +256,13 @@ screens.group = (id, params) => {
   const members = db.groupMembers(g.id);
   const { bal, paid, owed, spend } = computeBalances(members, db.expenses(g.id));
 
+  const invitedCount = members.filter((m) => m.status === 'invited').length;
   const header = `<div class="row" style="gap:14px;margin-bottom:8px">
     <div class="avatars">${members.map((m) => avatar(m)).join('')}</div>
-    <div class="small muted">${members.length} ${esc(t('members'))}</div>
-    <a class="link" href="#/share" style="margin-left:auto">${icon('share')} ${esc(t('share'))}</a></div>
+    <div class="small muted">${members.length} ${esc(t('members'))}${invitedCount ? ` · ${invitedCount} ${esc(t('invited'))}` : ''}</div>
+    <div class="row" style="margin-left:auto;gap:14px">
+      <button class="link" id="invitebtn" style="background:none;border:0;padding:0">${icon('plus')} ${esc(t('inviteFriends'))}</button>
+      <a class="link" href="#/share">${icon('share')} ${esc(t('share'))}</a></div></div>
     <div class="card stats">
       <div><div class="small muted">${esc(t('groupSpending'))}</div><div class="num">${formatINR(spend)}</div></div>
       <div><div class="small muted">${esc(t('yourShare'))}</div><div class="num">${formatINR(owed['u_sam'])}</div></div>
@@ -247,7 +294,49 @@ screens.group = (id, params) => {
 
   const action = `<a class="btn" href="#/add">${icon('plus')} ${esc(t('addExpense'))}</a>`;
   app.innerHTML = shell('groups', `${header}${tabs}${body}`, { title: esc(g.name), subtitle: `${esc(t('netSpending'))} ${formatINR(spend)}`, action });
+  const ib = $('#invitebtn'); if (ib) ib.onclick = () => openInvite(g.id);
 };
+
+// Invite friends dialog: add by name/email, or copy a shareable invite link.
+function openInvite(gid) {
+  state.focusReturn = document.activeElement;
+  const members = db.groupMembers(gid);
+  const link = db.createInviteLink(gid);
+  const ov = document.createElement('div');
+  ov.className = 'overlay'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', t('inviteFriends'));
+  ov.innerHTML = `<div class="dialog"><div class="handle"></div>
+    <div class="row between"><h2>${esc(t('inviteFriends'))}</h2><button class="iconbtn" data-x aria-label="Close">${icon('x')}</button></div>
+    <div class="field"><label class="label">${esc(t('addByName'))} <span class="muted small">(one per line — email optional: Name &lt;email&gt;)</span></label>
+      <textarea class="input" id="invnames" rows="3" style="height:auto;padding:12px" placeholder="Priya\nDev &lt;dev@example.com&gt;"></textarea></div>
+    <button class="btn wide" data-send>${esc(t('sendInvites'))}</button>
+    <div class="rule"></div>
+    <label class="label">${esc(t('inviteLink'))}</label>
+    <div class="input"><span class="small num" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(link)}</span>
+      <button class="link" data-copy>${icon('copy')} ${esc(t('copyLink'))}</button></div>
+    <p class="fine mt8">Invited friends appear as “${esc(t('invited'))}” until they join. In a no-account build the link works on this device; with the backend configured it becomes a real, expiring invite.</p>
+    <div class="rule"></div>
+    <div class="small muted">${members.map((m) => `<span class="pill" style="margin:2px">${esc(m.name)} · ${esc(m.status === 'joined' ? t('joined') : t('invited'))}</span>`).join('')}</div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); state.focusReturn && state.focusReturn.focus && state.focusReturn.focus(); };
+  const key = (e) => { if (e.key === 'Escape') { document.removeEventListener('keydown', key); close(); } };
+  document.addEventListener('keydown', key);
+  ov.querySelector('[data-x]').onclick = () => { document.removeEventListener('keydown', key); close(); };
+  ov.onclick = (e) => { if (e.target === ov) { document.removeEventListener('keydown', key); close(); } };
+  ov.querySelector('[data-copy]').onclick = async () => { (await Share.copyText(link)) ? toast('Link copied') : toast('Copy unavailable'); };
+  ov.querySelector('[data-send]').onclick = async () => {
+    const entries = $('#invnames', ov).value.split('\n').map((s) => s.trim()).filter(Boolean).map((line) => {
+      const m = line.match(/^(.*?)\s*<([^>]+)>\s*$/);
+      return m ? { name: m[1].trim() || m[2], email: m[2] } : { name: line };
+    });
+    if (!entries.length) { $('#invnames', ov).focus(); return; }
+    const r = await db.inviteMembers(gid, entries);
+    document.removeEventListener('keydown', key); close();
+    toast(`${entries.length} ${entries.length === 1 ? 'friend' : 'friends'} ${t('invited').toLowerCase()}`);
+    screens.group(gid, new URLSearchParams());
+  };
+  $('#invnames', ov).focus();
+}
 
 function activityList(items) {
   const label = { expense_added: 'added', expense_changed: 'edited', payment_reported: 'reported', receipt_confirmed: 'confirmed', group_created: 'created' };
@@ -555,17 +644,32 @@ screens.empty = () => {
 screens.settings = () => {
   const mode = getThemeMode();
   const seg = (v, label) => `<a data-theme-set="${v}" href="#!" class="${mode === v ? 'active' : ''}">${esc(t(label))}</a>`;
+  const u = Auth.currentUser();
+  const profile = u
+    ? `<div class="row">${u.avatar ? `<img src="${esc(u.avatar)}" width="40" height="40" style="border-radius:50%" alt="">` : `<span class="avatar you">${esc((u.name || '?').slice(0, 2).toUpperCase())}</span>`}<div><strong>${esc(u.name)}</strong><div class="small muted">${esc(u.email || '')}</div></div></div>`
+    : `<div class="row">${avatarOf('u_sam')}<div><strong>Sam</strong><div class="small muted">${db.localMode ? 'No account · on this device' : esc(t('reviewMode'))}</div></div></div>`;
+  const signedIn = Auth.isSignedIn();
   app.innerHTML = shell('settings', `<div class="narrow">
-    <div class="card"><div class="row">${avatarOf('u_sam')}<div><strong>Sam</strong><div class="small muted">${esc(t('reviewMode'))}</div></div></div></div>
+    <div class="card">${profile}</div>
     <div class="card mt16"><div class="setting"><span>${esc(t('language'))}</span><a class="link" href="#/language">${esc(LANGS.find((l) => l.code === getLang()).native)} ${icon('chevron')}</a></div>
       <div class="setting"><span>${esc(t('theme'))}</span><div class="segments" style="width:auto">${seg('light', 'light')}${seg('dark', 'dark')}${seg('system', 'system')}</div></div>
       <div class="setting"><span>${esc(t('notifications'))}</span><input type="checkbox" checked style="width:auto;height:auto"></div>
-      <div class="setting"><span>${esc(t('export'))}</span><a class="link" href="#!" id="exp">CSV ${icon('arrowUpRight')}</a></div>
     </div>
-    <button class="btn secondary wide mt16" href="#/login" onclick="location.hash='#/login'">${icon('logout')} ${esc(t('signOut'))}</button>
+    <div class="card mt16">
+      <div class="setting"><span>${esc(t('saveSession'))}<div class="small muted">Download a .md copy — works offline, no account needed</div></span><button class="link" data-act="save">${icon('arrowUpRight')} .md</button></div>
+      <div class="setting"><span>${esc(t('restoreSession'))}<div class="small muted">Load a previously saved .md session</div></span><label class="link" style="cursor:pointer">${icon('receipt')} Choose file<input type="file" id="restore" accept=".md,text/markdown" hidden></label></div>
+    </div>
+    ${signedIn
+      ? `<button class="btn secondary wide mt16" id="signout">${icon('logout')} ${esc(t('signOut'))}</button>`
+      : `<button class="btn secondary wide mt16" onclick="location.hash='#/login'">${icon('logout')} ${esc(t('createAccount'))}</button>`}
   </div>`, { title: esc(t('nav_settings')) });
   $$('[data-theme-set]').forEach((a) => a.onclick = (e) => { e.preventDefault(); applyTheme(a.dataset.themeSet); screens.settings(); });
-  $('#exp') && ($('#exp').onclick = (e) => { e.preventDefault(); toast('Exported (preview)'); });
+  const so = $('#signout'); if (so) so.onclick = async () => { await Auth.signOut(); go('#/login'); };
+  const rf = $('#restore'); if (rf) rf.onchange = async (e) => {
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    try { const st = await Local.fromMarkdownFile(file); db.enableLocal(st); state.noAccount = true; toast('Session restored'); go('#/home'); }
+    catch (err) { toast(err.message || 'Could not read that file'); }
+  };
 };
 
 screens.language = () => {
@@ -576,6 +680,22 @@ screens.language = () => {
     ${needsReview(cur) ? `<div class="pill" style="border-color:var(--accent)">${esc(t('reviewMode'))}: needs native-language review</div>` : ''}
     </div>`, { title: esc(t('language')) });
   $$('[data-lang]').forEach((b) => b.onclick = () => { setLang(b.dataset.lang); document.documentElement.lang = b.dataset.lang; screens.language(); });
+};
+
+// Invite-link landing.
+screens.join = (params) => {
+  const gid = params.get('g');
+  const g = db.group(gid);
+  const name = g ? g.name : 'a group';
+  app.innerHTML = `<div class="login"><div class="login-left">${lockup(true)}
+    <div class="login-copy"><h1>You’re invited to ${esc(name)}</h1>
+      <p>Join to see who paid what and settle up. Sign in with Google, or continue on this device without an account.</p>
+      ${Auth.configured() ? `<button class="btn google" id="gbtn"><img src="assets/google-g.png" alt="">${esc(t('continueGoogle'))}</button>` : ''}
+      <button class="btn ${Auth.configured() ? 'secondary' : ''} wide" id="joinlocal" style="margin-top:12px">${g ? 'Open ' + esc(name) : esc(t('useWithoutAccount'))}</button>
+      <p class="fine mt16">${g ? '' : 'This invite link isn’t recognised on this device — the group lives where it was created.'}</p>
+    </div></div><div class="login-right">${lockup(false)}</div></div>`;
+  const gb = $('#gbtn'); if (gb) gb.onclick = async () => { try { await Auth.signInWithGoogle('#/group/' + gid); } catch {} };
+  $('#joinlocal').onclick = () => { db.enableLocal(Local.loadLocal()); state.noAccount = true; go(g ? '#/group/' + gid : '#/home'); };
 };
 
 // Review gallery (prototype tool — outside product UI)
@@ -609,6 +729,12 @@ function router() {
   const name = parts[0] || 'login';
   const arg = parts[1];
   window.scrollTo(0, 0);
+  // Auth gate: when real backend is configured, product routes require a session
+  // unless the user explicitly chose no-account/local mode.
+  const publicRoutes = new Set(['login', 'language', 'gallery', 'join']);
+  if (Auth.configured() && !Auth.isSignedIn() && !db.localMode && !publicRoutes.has(name)) {
+    state.afterLogin = location.hash; return screens.login(params);
+  }
   try {
     if (name === 'group') screens.group(arg, params);
     else if (name === 'expense') screens.expense(arg, params);
@@ -625,11 +751,41 @@ function router() {
 // Prototype helper (used by the review gallery and QA): switch language and re-render.
 window.SBDP_setLang = (c) => { setLang(c); document.documentElement.lang = c; router(); };
 
+// Export the current session to a Markdown file the user can keep / re-import.
+function saveSessionFile() {
+  const md = Local.toMarkdown(db.exportState ? db.exportState() : db.state);
+  const stamp = new Date().toISOString().slice(0, 10);
+  const ok = Local.download(`sbdp-session-${stamp}.md`, md);
+  toast(ok ? `${t('saveSession')} ✓` : 'Save unavailable in this browser');
+}
+
+// Delegated actions that live outside a single screen's own wiring.
+document.addEventListener('click', (e) => {
+  const act = e.target.closest && e.target.closest('[data-act]');
+  if (act && act.dataset.act === 'save') { e.preventDefault(); saveSessionFile(); }
+});
+
+// Offline/online: keep working, offer to save. Never block on connectivity.
+window.addEventListener('offline', () => { toast(t('offlineTitle') + ' — ' + t('offlineBody'), 4000); router(); });
+window.addEventListener('online', () => router());
+
 window.addEventListener('hashchange', router);
-window.addEventListener('DOMContentLoaded', () => {
+
+async function boot() {
   applyTheme(getThemeMode());
   document.documentElement.lang = getLang();
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { if (getThemeMode() === 'system') applyTheme('system'); });
+  // Resume a saved no-account session if one exists on this device.
+  if (db.mode === 'preview' && Local.hasLocal()) { db.enableLocal(Local.loadLocal()); state.noAccount = true; }
+  // Establish a real session (and complete any Google OAuth redirect) before render.
+  await Auth.init();
+  Auth.onChange(() => router());
+  // If real auth is configured and the user just signed in, land them home.
+  if (Auth.isSignedIn() && (location.hash === '' || location.hash.startsWith('#/login'))) {
+    const back = Auth.takeReturn(); location.hash = back || '#/home';
+  }
   router();
-});
-if (document.readyState !== 'loading') { applyTheme(getThemeMode()); router(); }
+}
+
+if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', boot);
+else boot();

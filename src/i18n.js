@@ -46,6 +46,13 @@ const en = {
   owes: 'owes', isOwed: 'is owed', settledUp: 'All settled up',
   notJoined: 'Not joined', invited: 'Invited',
   validation_amount: 'Enter an amount greater than zero',
+  useWithoutAccount: 'Use without an account',
+  localDisclaimer: 'No account — your data is saved only on this device. Export a copy so you don’t lose it.',
+  saveSession: 'Save session (.md)', restoreSession: 'Restore from file', saved: 'Saved',
+  offlineTitle: 'You’re offline', offlineBody: 'SBDP keeps working. Save a copy of your session so nothing is lost.',
+  invite: 'Invite', inviteFriends: 'Invite friends', addByName: 'Add by name',
+  sendInvites: 'Send invites', inviteLink: 'Invite link', joined: 'Joined',
+  createAccount: 'Create account or sign in',
 };
 
 // Non-English catalogues fall back to English for any missing key (see t()).

@@ -59,8 +59,21 @@ class PreviewAdapter {
     this.mode = 'preview';
     this.state = clone(SEED);
     this._seq = 100;
+    this.localMode = false;   // true once the user chooses "use without an account"
+    this._onPersist = null;   // optional hook (set by app.js) fired after each write
   }
   get currentUserId() { return this.state.currentUserId; }
+
+  // Turn on local (no-account) persistence. Loads any saved session on this
+  // device, otherwise keeps the current demo data. All later writes autosave.
+  enableLocal(saved) {
+    this.localMode = true;
+    if (saved && Array.isArray(saved.groups)) { this.state = saved; this._seq = Math.max(this._seq, 1000); }
+    this._persist();
+  }
+  exportState() { return this.state; }
+  importState(s) { if (s && Array.isArray(s.groups)) { this.state = s; this._seq = Math.max(this._seq, 1000); this._persist(); return true; } return false; }
+  _persist() { if (this.localMode && this._onPersist) { try { this._onPersist(this.state); } catch {} } }
   auth() { return { mode: 'preview', user: null }; }
   async signInPreview() {
     // Explicitly a SIMULATED session — never presented as real Google auth.
@@ -89,7 +102,34 @@ class PreviewAdapter {
     });
     this.state.groups.push({ id: gid, name, memberIds, archived: false, type, description });
     this.state.activity.unshift({ id: 'a' + (++this._seq), type: 'group_created', actor: 'u_sam', text: `created ${name}`, ts: new Date().toISOString() });
+    this._persist();
     return { id: gid, saved: 'preview' };
+  }
+
+  // Invite friends to a group by name (+ optional email). They become 'invited'
+  // ledger entities until they accept and their account is claimed.
+  async inviteMembers(gid, entries = []) {
+    const g = this.group(gid);
+    if (!g) return { added: [] };
+    const added = [];
+    entries.forEach((e) => {
+      const name = (e.name || e.email || '').trim();
+      if (!name) return;
+      const id = 'u_' + (++this._seq);
+      const initials = name.replace(/[^A-Za-z ]/g, '').split(/\s+/).map((s) => s[0]).join('').slice(0, 2).toUpperCase() || name.slice(0, 2).toUpperCase();
+      this.state.members.push({ id, name, initials, email: e.email || null, status: 'invited' });
+      g.memberIds.push(id);
+      added.push(id);
+    });
+    if (added.length) this.state.activity.unshift({ id: 'a' + (++this._seq), type: 'members_invited', actor: this.state.currentUserId, text: `invited ${added.length} to ${g.name}`, ts: new Date().toISOString() });
+    this._persist();
+    return { added, saved: 'preview' };
+  }
+
+  // A shareable invite link (scope='invite'), expiring + revocable in the schema.
+  createInviteLink(gid) {
+    const token = 'inv_' + Math.random().toString(36).slice(2, 10);
+    return `${location.origin}${location.pathname}#/join?g=${gid}&t=${token}`;
   }
 
   // Idempotent by clientId. Returns { id, saved: 'preview' }.
@@ -102,18 +142,21 @@ class PreviewAdapter {
       const e = this.expense(exp.id);
       Object.assign(e, exp, { rev: (e.rev || 1) + 1 });
       this.state.activity.unshift({ id: 'a' + (++this._seq), type: 'expense_changed', actor: this.state.currentUserId, text: `edited ${e.desc}`, amount: e.amountPaise, ts: new Date().toISOString() });
+      this._persist();
       return { id: e.id, saved: 'preview' };
     }
     const id = 'e_' + (++this._seq);
     const rec = { ...clone(exp), id, clientId, rev: 1 };
     this.state.expenses.push(rec);
     this.state.activity.unshift({ id: 'a' + (++this._seq), type: 'expense_added', actor: this.state.currentUserId, text: `added ${rec.desc}`, amount: rec.amountPaise, ts: new Date().toISOString() });
+    this._persist();
     return { id, saved: 'preview' };
   }
 
   async reportPayment(gid, from, to, paise) {
     const id = 'p_' + (++this._seq);
     this.state.proposedPayments.push({ id, groupId: gid, from, to, paise, status: 'reported' });
+    this._persist();
     return { id, saved: 'preview' };
   }
   // Confirmation moves a proposed payment into the authoritative ledger.
@@ -123,6 +166,7 @@ class PreviewAdapter {
     p.status = 'confirmed';
     this.state.confirmedPayments.push({ ...p });
     this.state.activity.unshift({ id: 'a' + (++this._seq), type: 'receipt_confirmed', actor: 'u_sam', text: `confirmed ₹${(p.paise / 100).toLocaleString('en-IN')} from ${this.member(p.from)?.name}`, amount: p.paise, ts: new Date().toISOString() });
+    this._persist();
     return { ok: true, saved: 'preview' };
   }
 }
