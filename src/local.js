@@ -5,10 +5,12 @@
 
 const KEY = 'sbdp-local-session';
 
-export function hasLocal() { try { return !!localStorage.getItem(KEY); } catch { return false; } }
-export function loadLocal() { try { const r = localStorage.getItem(KEY); return r ? JSON.parse(r) : null; } catch { return null; } }
-export function saveLocal(state) { try { localStorage.setItem(KEY, JSON.stringify(state)); return true; } catch { return false; } }
-export function clearLocal() { try { localStorage.removeItem(KEY); } catch {} }
+// An optional key lets each signed-in user persist under their own namespace
+// (sbdp-user-<uid>), separate from the shared no-account session.
+export function hasLocal(key = KEY) { try { return !!localStorage.getItem(key); } catch { return false; } }
+export function loadLocal(key = KEY) { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : null; } catch { return null; } }
+export function saveLocal(state, key = KEY) { try { localStorage.setItem(key, JSON.stringify(state)); return true; } catch { return false; } }
+export function clearLocal(key = KEY) { try { localStorage.removeItem(key); } catch {} }
 
 export function isOnline() { return typeof navigator === 'undefined' ? true : navigator.onLine !== false; }
 

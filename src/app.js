@@ -1,4 +1,4 @@
-import { makeAdapter, UNEQUAL_DRAFT } from './data.js';
+import { makeAdapter } from './data.js';
 import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven } from './money.js';
 import { evaluate, roundToPaise } from './calc.js';
 import { t, setLang, getLang, LANGS, needsReview } from './i18n.js';
@@ -12,7 +12,7 @@ const db = makeAdapter();
 // No-account persistence: writes autosave to this device.
 if (db.mode === 'preview') db._onPersist = (s) => Local.saveLocal(s);
 const app = document.getElementById('app');
-const state = { group: 'g_goa', calcTarget: null, recorder: null, focusReturn: null };
+const state = { group: null, calcTarget: null, recorder: null, focusReturn: null };
 
 // ---- helpers ---------------------------------------------------------------
 const $ = (s, r = document) => r.querySelector(s);
@@ -70,7 +70,8 @@ function sidebarUser() {
     return `<div class="row">${av}<div><strong style="font-size:13px">${esc(u.name)}</strong><div class="small muted">${esc(u.email || '')}</div></div></div>`;
   }
   const label = db.localMode ? 'On this device' : 'Preview session';
-  return `<div class="row">${avatarOf('u_sam')}<div><strong style="font-size:13px">Sam</strong><div class="small muted">${esc(label)}</div></div></div>`;
+  const meName = db.member(db.currentUserId)?.name || 'You';
+  return `<div class="row">${avatarOf(db.currentUserId)}<div><strong style="font-size:13px">${esc(meName)}</strong><div class="small muted">${esc(label)}</div></div></div>`;
 }
 
 // Save-a-copy button appears in no-account/local mode (and whenever offline).
@@ -94,24 +95,23 @@ const screens = {};
 
 // A. Login
 screens.login = () => {
-  const example = `<div class="card receipt-card"><div class="small muted">Goa trip · Dinner</div>
+  const example = `<div class="card receipt-card"><div class="small muted">Dinner · split 4 ways</div>
     <div class="amount num" style="margin-top:8px">${formatINR(toPaise(2400))}</div>
     <div class="rule"></div>
-    <div class="row between small"><span class="muted">${esc(t('paidBy'))} Ananya</span><span class="num">${formatINR(toPaise(600))} ${esc(t('yourShare')).toLowerCase()}</span></div></div>`;
+    <div class="row between small"><span class="muted">${esc(t('yourShare'))}</span><span class="num">${formatINR(toPaise(600))}</span></div></div>`;
   app.innerHTML = `<div class="login">
     <div class="login-left">
       ${lockup(true)}
       <div class="login-copy">
         <h1>${esc(t('benefit'))}</h1>
-        <p>Split a bill four ways, track who paid, and settle up — without the spreadsheet.</p>
+        <p>Split a bill, track who paid, and settle up — without the spreadsheet.</p>
         <button class="btn google" id="gbtn"><img src="assets/google-g.png" alt="">${esc(t('continueGoogle'))}</button>
         <button class="btn secondary wide" id="noacct" style="margin-top:12px">${esc(t('useWithoutAccount'))}</button>
         <div class="row" style="gap:16px;margin-top:20px">
           <a class="link" href="#/language">${icon('globe')} ${esc(LANGS.find((l) => l.code === getLang()).native)}</a>
-          <a class="link" href="#/home" id="quick">${esc(t('tryQuick'))} ${icon('arrowUpRight')}</a>
         </div>
         <div class="notice" id="authnote" hidden></div>
-        <p class="fine" style="margin-top:28px">SBDP uses Google sign-in. We only request your name and email.${Auth.configured() ? ' Your account is created automatically on first sign-in.' : ` This preview isn’t connected to Google — “${esc(t('tryQuick'))}” opens sample data.`}</p>
+        <p class="fine" style="margin-top:28px">SBDP uses Google sign-in. We only request your name and email. Your account is created automatically on first sign-in. Prefer not to sign in? “${esc(t('useWithoutAccount'))}” keeps everything on this device.</p>
       </div>
     </div>
     <div class="login-right">${lockup(false)}${example}</div>
@@ -153,51 +153,57 @@ screens.login = () => {
 
 // B. Dashboard
 screens.home = () => {
-  const g = db.group(state.group);
-  const members = db.groupMembers(g.id);
-  const { bal, spend } = computeBalances(members, db.expenses(g.id));
-  const you = db.currentUserId || 'u_sam';
-  const yb = bal['u_sam'];
-  const owed = yb > 0 ? yb : 0;
-  const owe = yb < 0 ? -yb : 0;
-  const expenses = db.expenses(g.id).slice().reverse();
+  const me = db.currentUserId;
+  const uname = (db.member(me)?.name || 'there').split(' ')[0];
+  const groups = db.groups();
 
-  const cards = `<div class="grid">
-    <div class="card balance"><div class="row"><span class="round">${icon('arrowUpRight')}</span><span class="muted small">${esc(t('youOwe'))}</span></div>
-      <div class="amount num">${formatINR(owe)}</div><div class="hint">Across ${db.groups().length} group</div></div>
-    <div class="card balance highlight"><div class="row"><span class="round">${icon('arrowDownLeft')}</span><span class="muted small">${esc(t('youAreOwed'))}</span></div>
-      <div class="amount num">${formatINR(owed)}</div><div class="hint">Goa trip settles to you</div></div>
-  </div>`;
+  if (groups.length === 0) {
+    app.innerHTML = shell('home', `<div class="card empty"><img src="assets/brand/empty-receipt.svg" alt="">
+      <p>No groups yet. Create a group, add friends, and split your first expense.</p>
+      <a class="btn" href="#/new-group">${icon('plus')} ${esc(t('createGroup'))}</a></div>`,
+      { title: esc(t('nav_home')), subtitle: `Hi ${esc(uname)} — let’s set up your first split.` });
+    return;
+  }
+  if (!state.group || !db.group(state.group)) state.group = groups[0].id;
 
-  const groupRows = db.groups().map((gr) => {
+  // Aggregate balances across ALL of the user's groups.
+  let owe = 0, owed = 0;
+  const groupRows = groups.map((gr) => {
     const gm = db.groupMembers(gr.id);
-    const b = computeBalances(gm, db.expenses(gr.id)).bal['u_sam'] || 0;
+    const b = computeBalances(gm, db.expenses(gr.id)).bal[me] || 0;
+    if (b < 0) owe += -b; else owed += b;
     const last = db.expenses(gr.id).slice(-1)[0];
     return `<a class="expense" href="#/group/${gr.id}">
       <span class="groupmark">${esc(gr.name.slice(0, 2).toUpperCase())}</span>
       <span class="desc"><strong>${esc(gr.name)}</strong><p>${gm.length} ${esc(t('members'))} · ${last ? esc(last.desc) : '—'}</p></span>
-      <span class="right"><strong class="num" style="color:${b < 0 ? 'var(--error)' : 'var(--ink)'}">${formatINR(b, { sign: true })}</strong><p>${b < 0 ? esc(t('youOwe')) : esc(t('youAreOwed'))}</p></span></a>`;
+      <span class="right"><strong class="num" style="color:${b < 0 ? 'var(--error)' : 'var(--ink)'}">${formatINR(b, { sign: b !== 0 })}</strong><p>${b < 0 ? esc(t('youOwe')) : esc(t('youAreOwed'))}</p></span></a>`;
   }).join('');
 
-  const recent = expenses.slice(0, 4).map((e) => expenseRow(e)).join('');
+  const cards = `<div class="grid">
+    <div class="card balance"><div class="row"><span class="round">${icon('arrowUpRight')}</span><span class="muted small">${esc(t('youOwe'))}</span></div>
+      <div class="amount num">${formatINR(owe)}</div><div class="hint">Across ${groups.length} ${groups.length === 1 ? 'group' : 'groups'}</div></div>
+    <div class="card balance highlight"><div class="row"><span class="round">${icon('arrowDownLeft')}</span><span class="muted small">${esc(t('youAreOwed'))}</span></div>
+      <div class="amount num">${formatINR(owed)}</div><div class="hint">${owed > 0 ? 'Settles to you' : 'Nothing outstanding'}</div></div>
+  </div>`;
+
+  const recent = db.expenses().slice().reverse().slice(0, 5).map((e) => expenseRow(e)).join('') || `<p class="muted">${esc(t('emptyExpenses'))}</p>`;
 
   const action = `<div class="row"><a class="iconbtn" href="#/calc" aria-label="${esc(t('calculator'))}">${icon('calc')}</a>
     <a class="btn" href="#/add">${icon('plus')} ${esc(t('addExpense'))}</a></div>`;
 
   app.innerHTML = shell('home', `${cards}
     <div class="cols"><div>
-      <div class="section"><h2>${esc(t('recentExpenses'))}</h2><a class="link" href="#/group/${g.id}">View all ${icon('chevron')}</a></div>
+      <div class="section"><h2>${esc(t('recentExpenses'))}</h2><a class="link" href="#/groups">View all ${icon('chevron')}</a></div>
       <div class="card">${recent}</div>
     </div><div>
-      <div class="section"><h2>${esc(t('activeGroups'))}</h2></div>
+      <div class="section"><h2>${esc(t('activeGroups'))}</h2><a class="link" href="#/new-group">${icon('plus')}</a></div>
       <div class="card">${groupRows}</div>
-      <div class="notice">${icon('info')}<div>Group spending ${money(spend)} · your share ${money(computeBalances(members, db.expenses(g.id)).owed['u_sam'])}.</div></div>
-    </div></div>`, { title: `${esc(t('nav_home'))}`, subtitle: 'Hi Sam — here’s where things stand.', action });
+    </div></div>`, { title: `${esc(t('nav_home'))}`, subtitle: `Hi ${esc(uname)} — here’s where things stand.`, action });
 };
 
 function expenseRow(e) {
   const { shares } = computeShares(e);
-  const mine = shares['u_sam'] || 0;
+  const mine = shares[db.currentUserId] || 0;
   const payer = e.payers[0];
   return `<a class="expense" href="#/expense/${e.id}">
     <span class="round">${icon('receipt')}</span>
@@ -217,10 +223,11 @@ screens.groups = () => {
       ${icon('chevron')}</a>`;
   }).join('');
   const action = `<a class="btn" href="#/new-group">${icon('plus')} ${esc(t('createGroup'))}</a>`;
-  app.innerHTML = shell('groups', `
-    <div class="card"><div class="input"><span class="row">${icon('search')} <input style="border:0;height:auto;padding:0" placeholder="Search groups" aria-label="Search"></span></div></div>
-    <div class="segments" style="max-width:320px;margin-top:16px"><a class="active" href="#/groups">Active</a><a href="#/groups">Archived</a></div>
-    <div class="card" style="margin-top:16px">${rows}</div>`, { title: esc(t('nav_groups')), action });
+  const body = db.groups().length
+    ? `<div class="card"><div class="input"><span class="row">${icon('search')} <input style="border:0;height:auto;padding:0" placeholder="Search groups" aria-label="Search"></span></div></div>
+       <div class="card" style="margin-top:16px">${rows}</div>`
+    : `<div class="card empty"><img src="assets/brand/empty-receipt.svg" alt=""><p>No groups yet. Create one and invite friends.</p><a class="btn" href="#/new-group">${icon('plus')} ${esc(t('createGroup'))}</a></div>`;
+  app.innerHTML = shell('groups', body, { title: esc(t('nav_groups')), action });
 };
 
 // New group
@@ -229,7 +236,7 @@ screens['new-group'] = () => {
     <form class="card form" id="ng">
       <div class="field"><label class="label">Group name</label><input id="gname" placeholder="e.g. Weekend trip" required></div>
       <div class="field"><label class="label">${esc(t('splitBetween'))} <span class="muted small">(names, comma separated — email not required)</span></label>
-        <input id="gpeople" placeholder="Ananya, Rohit, Meera"></div>
+        <input id="gpeople" placeholder="e.g. Priya, Dev, Aarav"></div>
       <details class="field"><summary class="link">More details</summary>
         <div class="field"><label class="label">Group type</label><input placeholder="Trip, Flat, Event…"></div>
         <div class="field"><label class="label">Description</label><input placeholder="Optional"></div>
@@ -251,6 +258,7 @@ screens['new-group'] = () => {
 // D. Group detail
 screens.group = (id, params) => {
   const g = db.group(id) || db.group(state.group);
+  if (!g) { go('#/groups'); return; }
   state.group = g.id;
   const tab = params.get('tab') || 'expenses';
   const members = db.groupMembers(g.id);
@@ -262,11 +270,12 @@ screens.group = (id, params) => {
     <div class="small muted">${members.length} ${esc(t('members'))}${invitedCount ? ` · ${invitedCount} ${esc(t('invited'))}` : ''}</div>
     <div class="row" style="margin-left:auto;gap:14px">
       <button class="link" id="invitebtn" style="background:none;border:0;padding:0">${icon('plus')} ${esc(t('inviteFriends'))}</button>
-      <a class="link" href="#/share">${icon('share')} ${esc(t('share'))}</a></div></div>
+      <a class="link" href="#/share">${icon('share')} ${esc(t('share'))}</a>
+      <button class="link" id="delgroup" style="background:none;border:0;padding:0;color:var(--error)">${icon('trash')} ${esc(t('deleteGroup'))}</button></div></div>
     <div class="card stats">
       <div><div class="small muted">${esc(t('groupSpending'))}</div><div class="num">${formatINR(spend)}</div></div>
-      <div><div class="small muted">${esc(t('yourShare'))}</div><div class="num">${formatINR(owed['u_sam'])}</div></div>
-      <div><div class="small muted">${esc(t('youPaid'))}</div><div class="num">${formatINR(paid['u_sam'])}</div></div>
+      <div><div class="small muted">${esc(t('yourShare'))}</div><div class="num">${formatINR(owed[db.currentUserId])}</div></div>
+      <div><div class="small muted">${esc(t('youPaid'))}</div><div class="num">${formatINR(paid[db.currentUserId])}</div></div>
     </div>`;
 
   const tabs = `<div class="tabs">
@@ -295,7 +304,25 @@ screens.group = (id, params) => {
   const action = `<a class="btn" href="#/add">${icon('plus')} ${esc(t('addExpense'))}</a>`;
   app.innerHTML = shell('groups', `${header}${tabs}${body}`, { title: esc(g.name), subtitle: `${esc(t('netSpending'))} ${formatINR(spend)}`, action });
   const ib = $('#invitebtn'); if (ib) ib.onclick = () => openInvite(g.id);
+  const dg = $('#delgroup'); if (dg) dg.onclick = () => confirmDialog(`Delete “${g.name}”?`, 'This removes the group and all its expenses. This cannot be undone.', async () => { await db.deleteGroup(g.id); state.group = null; toast('Group deleted'); go('#/groups'); });
 };
+
+// Small confirm dialog for destructive actions. Restores focus on close.
+function confirmDialog(title, body, onYes) {
+  state.focusReturn = document.activeElement;
+  const ov = document.createElement('div');
+  ov.className = 'overlay'; ov.setAttribute('role', 'dialog');
+  ov.innerHTML = `<div class="dialog"><div class="handle"></div>
+    <h2>${esc(title)}</h2><p class="muted mt8">${esc(body)}</p>
+    <div class="row" style="gap:10px;margin-top:20px"><button class="btn secondary" data-no style="flex:1">Cancel</button>
+      <button class="btn" data-yes style="flex:1;background:var(--error);color:#fff">${esc(t('delete'))}</button></div></div>`;
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); state.focusReturn && state.focusReturn.focus && state.focusReturn.focus(); };
+  ov.querySelector('[data-no]').onclick = close;
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  ov.querySelector('[data-yes]').onclick = async () => { close(); await onYes(); };
+  ov.querySelector('[data-yes]').focus();
+}
 
 // Invite friends dialog: add by name/email, or copy a shareable invite link.
 function openInvite(gid) {
@@ -346,15 +373,25 @@ function activityList(items) {
 }
 
 // E. Add expense (with split modes + calculator)
-const draft = {
-  amountPaise: 0, desc: '', payers: [{ memberId: 'u_sam', paise: 0 }],
-  participants: ['u_sam', 'u_ananya', 'u_rohit', 'u_meera'], split: { mode: 'equal' },
-};
+const draft = { groupId: null, amountPaise: 0, desc: '', payers: [{ memberId: 'me', paise: 0 }], participants: [], split: { mode: 'equal' } };
+function resetDraftFor(gid) {
+  draft.groupId = gid; draft.amountPaise = 0; draft.desc = ''; draft.split = { mode: 'equal' };
+  draft.payers = [{ memberId: db.currentUserId, paise: 0 }];
+  draft.participants = db.groupMembers(gid).map((m) => m.id);
+}
 screens.add = () => {
+  const groups = db.groups();
+  if (!groups.length) { toast('Create a group first'); go('#/new-group'); return; }
+  if (!state.group || !db.group(state.group)) state.group = groups[0].id;
+  if (draft.groupId !== state.group) resetDraftFor(state.group);
   renderAdd(draft);
 };
 function renderAdd(d) {
   const members = db.groupMembers(state.group);
+  const groups = db.groups();
+  const groupPicker = groups.length > 1
+    ? `<div class="field"><label class="label">Group</label><select id="grpsel" class="input" style="display:block">${groups.map((gr) => `<option value="${gr.id}" ${gr.id === state.group ? 'selected' : ''}>${esc(gr.name)}</option>`).join('')}</select></div>`
+    : '';
   const modes = [['equal', 'split_equal'], ['exact', 'split_exact'], ['percent', 'split_percent'], ['shares', 'split_shares'], ['equalExtra', 'split_extra']];
   const seg = `<div class="segments" id="modes">${modes.map(([m, k]) => `<a data-mode="${m}" class="${d.split.mode === m ? 'active' : ''}" href="#!">${esc(t(k))}</a>`).join('')}</div>`;
 
@@ -368,6 +405,7 @@ function renderAdd(d) {
       <div class="amount-field"><span>₹</span><input id="amt" inputmode="decimal" placeholder="0" value="${d.amountPaise ? (d.amountPaise / 100) : ''}" aria-label="${esc(t('amount'))}">
         <button type="button" class="iconbtn" id="calcbtn" aria-label="${esc(t('calculator'))}">${icon('calc')}</button></div>
       <div class="field"><label class="label">${esc(t('description'))}</label><input id="desc" value="${esc(d.desc)}" placeholder="What was this for?"></div>
+      ${groupPicker}
       <div class="field"><label class="label">${esc(t('paidBy'))}</label>
         <select id="paidby" class="input" style="display:block">${members.map((m) => `<option value="${m.id}" ${d.payers[0].memberId === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>
         <div class="small muted mt8">Multiple payers and subset selection work independently.</div></div>
@@ -375,8 +413,7 @@ function renderAdd(d) {
       <div class="field">${seg}</div>
       <div id="splitcfg"></div>
       <div class="preview" id="preview"></div>
-      <div class="tools"><span class="row" style="gap:6px"><label class="row" style="gap:6px;cursor:pointer"><input type="checkbox" style="width:auto;height:auto"> Notes</label></span>
-        <a href="#!">${icon('receipt')} Receipt</a><a href="#/expense/e_stay">${icon('mic')} ${esc(t('voiceNote'))}</a></div>
+      <div class="tools"><span class="muted small">Add a receipt or voice note after saving.</span></div>
       <button class="btn wide" type="submit">${esc(t('save'))}</button>
     </form></div>`, { title: esc(t('addExpense')) });
 
@@ -386,6 +423,7 @@ function renderAdd(d) {
   $('#desc').oninput = (e) => (d.desc = e.target.value);
   $('#paidby').onchange = (e) => (d.payers = [{ memberId: e.target.value, paise: d.amountPaise }]);
   $('#calcbtn').onclick = () => openCalc((val) => { amt.value = val; updateAmount(); });
+  const gs = $('#grpsel'); if (gs) gs.onchange = (e) => { state.group = e.target.value; resetDraftFor(state.group); renderAdd(draft); };
 
   $$('#modes a').forEach((a) => a.onclick = (ev) => { ev.preventDefault(); d.split = { mode: a.dataset.mode }; renderAdd(d); });
   $$('[data-part]').forEach((b) => b.onclick = () => {
@@ -438,11 +476,12 @@ function renderAdd(d) {
     ev.preventDefault();
     if (d.amountPaise <= 0) { toast(t('validation_amount')); amt.focus(); return; }
     d.payers = [{ memberId: $('#paidby').value, paise: d.amountPaise }];
+    if (!d.participants.length) { toast('Pick at least one person'); return; }
+    d.payers = [{ memberId: $('#paidby').value, paise: d.amountPaise }];
     const clientId = 'c_' + Date.now();
-    const r = await db.saveExpense({ ...d, groupId: state.group, date: '2026-09-12' }, clientId);
-    toast(db.mode === 'preview' ? `${t('savedPreview')}` : 'Saved');
-    // reset draft
-    d.amountPaise = 0; d.desc = ''; d.split = { mode: 'equal' };
+    await db.saveExpense({ groupId: state.group, desc: d.desc, amountPaise: d.amountPaise, payers: d.payers, participants: d.participants, split: d.split, date: new Date().toISOString().slice(0, 10) }, clientId);
+    toast(Auth.isSignedIn() ? 'Saved' : (db.localMode ? t('saved') : t('savedPreview')));
+    draft.groupId = null; // force a fresh draft next time
     go(`#/group/${state.group}?tab=expenses`);
   };
 }
@@ -496,7 +535,8 @@ function openCalc(onUse) {
 
 // G. Expense detail + voice note
 screens.expense = (id) => {
-  const e = db.expense(id) || db.expenses(state.group)[0];
+  const e = db.expense(id);
+  if (!e) { go(state.group ? `#/group/${state.group}` : '#/home'); return; }
   const { shares } = computeShares(e);
   const contrib = e.payers.map((p) => `<div class="split"><span class="row">${avatarOf(p.memberId)} ${esc(nameOf(p.memberId))} <span class="muted small">${esc(t('paidBy')).toLowerCase()}</span></span><span class="num">${formatINR(p.paise)}</span></div>`).join('');
   const partRows = e.participants.map((pid) => `<div class="split"><span class="row">${avatarOf(pid)} ${esc(nameOf(pid))}</span><span class="num">${formatINR(shares[pid] || 0)}</span></div>`).join('');
@@ -512,8 +552,11 @@ screens.expense = (id) => {
 
     <div class="card mt16"><div class="small muted">Edit history</div>
       <div class="expense" style="border:0"><span>${avatarOf(e.payers[0].memberId)}</span><span class="desc"><strong>Created</strong><p>Revision ${e.rev || 1}</p></span></div></div>
-    </div>`, { title: esc(t('voiceNote')) ? '' : '' });
+
+    <button class="btn secondary wide mt16" id="delexp" style="color:var(--error)">${icon('trash')} ${esc(t('deleteExpense'))}</button>
+    </div>`, { title: '' });
   mountVoice($('#voice'));
+  const de = $('#delexp'); if (de) de.onclick = () => confirmDialog(`Delete “${e.desc}”?`, 'This removes the expense from the group ledger.', async () => { await db.deleteExpense(e.id); toast('Expense deleted'); go(`#/group/${e.groupId || state.group}?tab=expenses`); });
 };
 
 function mountVoice(el) {
@@ -562,7 +605,9 @@ function mountVoice(el) {
 
 // H. Share preview
 screens.share = () => {
-  const g = db.group(state.group);
+  const g = db.group(state.group) || db.groups()[0];
+  if (!g) { go('#/home'); return; }
+  state.group = g.id;
   const members = db.groupMembers(g.id);
   const { bal, spend } = computeBalances(members, db.expenses(g.id));
   const tx = settle(bal);
@@ -597,7 +642,9 @@ screens.share = () => {
 
 // I. Settle up (pre / post confirmation states)
 screens.settle = (arg, params) => {
-  const g = db.group(state.group);
+  const g = db.group(state.group) || db.groups()[0];
+  if (!g) { go('#/home'); return; }
+  state.group = g.id;
   const members = db.groupMembers(g.id);
   const post = params.get('state') === 'post';
   const base = computeBalances(members, db.expenses(g.id)).bal;
@@ -615,12 +662,12 @@ screens.settle = (arg, params) => {
       <span class="num">${formatINR(x.paise)}</span><a class="btn secondary" href="#!" data-pay="${x.from}">${esc(t('recordPayment'))}</a></div>`).join('')}
     </div>
     <details class="notice" style="cursor:pointer"><summary>How is this calculated?</summary>
-      <div class="mt8">Everyone’s share is ${formatINR(computeBalances(members, db.expenses(g.id)).owed['u_sam'])}. We net each person’s paid vs. owed, then match debtors to creditors with the fewest transfers.</div></details>
+      <div class="mt8">Everyone’s share is ${formatINR(computeBalances(members, db.expenses(g.id)).owed[db.currentUserId])}. We net each person’s paid vs. owed, then match debtors to creditors with the fewest transfers.</div></details>
 
     ${meera ? `<div class="section mt"><h2>Reported payment</h2></div>
     <div class="card"><div class="transfer">${avatarOf(meera.from)}<span class="who"><strong>${esc(nameOf(meera.from))}</strong> → <strong>${esc(nameOf(meera.to))}</strong><p class="small muted">${statusChip}</p></span>
       <span class="num">${formatINR(meera.paise)}</span></div>
-      ${post ? `<div class="notice">${icon('check')}<div>Confirmed. Sam is now owed ${formatINR(settle(base, confirmedList).filter(x=>x.to==='u_sam').reduce((s,x)=>s+x.paise,0))}. ${esc(nameOf(meera.from))} owes ${formatINR(-(base[meera.from]+meera.paise))} — ${esc(t('remaining'))}.</div></div>`
+      ${post ? `<div class="notice">${icon('check')}<div>Confirmed. Sam is now owed ${formatINR(settle(base, confirmedList).filter(x=>x.to===db.currentUserId).reduce((s,x)=>s+x.paise,0))}. ${esc(nameOf(meera.from))} owes ${formatINR(-(base[meera.from]+meera.paise))} — ${esc(t('remaining'))}.</div></div>`
       : `<div class="notice">${icon('info')}<div>${esc(nameOf(meera.from))} reported this. Until Sam confirms, the authoritative balance is unchanged. Opening a payment app does not confirm receipt.</div>
          <div class="row mt16" style="gap:10px"><a class="btn" href="#/settle?state=post" id="confirm">${esc(t('confirmedReceived'))}</a><button class="btn secondary">Not yet</button></div>`}
     </div>` : ''}
@@ -647,7 +694,7 @@ screens.settings = () => {
   const u = Auth.currentUser();
   const profile = u
     ? `<div class="row">${u.avatar ? `<img src="${esc(u.avatar)}" width="40" height="40" style="border-radius:50%" alt="">` : `<span class="avatar you">${esc((u.name || '?').slice(0, 2).toUpperCase())}</span>`}<div><strong>${esc(u.name)}</strong><div class="small muted">${esc(u.email || '')}</div></div></div>`
-    : `<div class="row">${avatarOf('u_sam')}<div><strong>Sam</strong><div class="small muted">${db.localMode ? 'No account · on this device' : esc(t('reviewMode'))}</div></div></div>`;
+    : `<div class="row">${avatarOf(db.currentUserId)}<div><strong>Sam</strong><div class="small muted">${db.localMode ? 'No account · on this device' : esc(t('reviewMode'))}</div></div></div>`;
   const signedIn = Auth.isSignedIn();
   app.innerHTML = shell('settings', `<div class="narrow">
     <div class="card">${profile}</div>
@@ -771,17 +818,31 @@ window.addEventListener('online', () => router());
 
 window.addEventListener('hashchange', router);
 
+function applyIdentity(u) {
+  const key = 'sbdp-user-' + u.id;
+  db._onPersist = (s) => Local.saveLocal(s, key);
+  db._persistAlways = true;
+  const saved = Local.loadLocal(key);
+  if (saved && Array.isArray(saved.groups)) db.importState(saved);
+  db.setIdentity(u);
+}
+
 async function boot() {
   applyTheme(getThemeMode());
   document.documentElement.lang = getLang();
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { if (getThemeMode() === 'system') applyTheme('system'); });
-  // Resume a saved no-account session if one exists on this device.
-  if (db.mode === 'preview' && Local.hasLocal()) { db.enableLocal(Local.loadLocal()); state.noAccount = true; }
   // Establish a real session (and complete any Google OAuth redirect) before render.
   await Auth.init();
-  Auth.onChange(() => router());
-  // If real auth is configured and the user just signed in, land them home.
-  if (Auth.isSignedIn() && (location.hash === '' || location.hash.startsWith('#/login'))) {
+  const u = Auth.currentUser();
+  if (u) {
+    // Signed in: personal account persisted under this user's namespace. No banner.
+    applyIdentity(u);
+  } else if (Local.hasLocal()) {
+    // Resume a saved no-account session on this device.
+    db.enableLocal(Local.loadLocal()); state.noAccount = true;
+  }
+  Auth.onChange((user) => { if (user) applyIdentity(user); router(); });
+  if (u && (location.hash === '' || location.hash.startsWith('#/login'))) {
     const back = Auth.takeReturn(); location.hash = back || '#/home';
   }
   router();

@@ -6,50 +6,16 @@
 
 import { toPaise } from './money.js';
 
-// ---- Canonical seed fixtures (Section 5 of the scope) ---------------------
-export const SEED = {
-  currentUserId: 'u_sam',
-  members: [
-    { id: 'u_sam', name: 'Sam', initials: 'SA', you: true, status: 'joined' },
-    { id: 'u_ananya', name: 'Ananya', initials: 'AN', status: 'joined' },
-    { id: 'u_rohit', name: 'Rohit', initials: 'RO', status: 'joined' },
-    { id: 'u_meera', name: 'Meera', initials: 'ME', status: 'invited' },
-  ],
-  groups: [
-    { id: 'g_goa', name: 'Goa trip', memberIds: ['u_sam', 'u_ananya', 'u_rohit', 'u_meera'], archived: false, type: 'Trip' },
-  ],
-  expenses: [
-    { id: 'e_stay', groupId: 'g_goa', desc: 'Stay', amountPaise: toPaise(8000), date: '2026-09-08',
-      payers: [{ memberId: 'u_sam', paise: toPaise(8000) }],
-      participants: ['u_sam', 'u_ananya', 'u_rohit', 'u_meera'], split: { mode: 'equal' }, rev: 1 },
-    { id: 'e_dinner', groupId: 'g_goa', desc: 'Dinner', amountPaise: toPaise(2400), date: '2026-09-09',
-      payers: [{ memberId: 'u_ananya', paise: toPaise(2400) }],
-      participants: ['u_sam', 'u_ananya', 'u_rohit', 'u_meera'], split: { mode: 'equal' }, rev: 1 },
-    { id: 'e_taxi', groupId: 'g_goa', desc: 'Taxi', amountPaise: toPaise(1200), date: '2026-09-10',
-      payers: [{ memberId: 'u_rohit', paise: toPaise(1200) }],
-      participants: ['u_sam', 'u_ananya', 'u_rohit', 'u_meera'], split: { mode: 'equal' }, rev: 1 },
-  ],
-  // Proposed (unconfirmed) partial payment — kept OUT of the authoritative ledger
-  // until Sam confirms. See the settle screen's pre/post states.
-  proposedPayments: [
-    { id: 'p_meera', groupId: 'g_goa', from: 'u_meera', to: 'u_sam', paise: toPaise(1000), status: 'reported' },
-  ],
-  confirmedPayments: [],
-  activity: [
-    { id: 'a1', type: 'expense_added', actor: 'u_sam', text: 'added Stay', amount: toPaise(8000), ts: '2026-09-08T10:12:00' },
-    { id: 'a2', type: 'expense_added', actor: 'u_ananya', text: 'added Dinner', amount: toPaise(2400), ts: '2026-09-09T21:40:00' },
-    { id: 'a3', type: 'expense_added', actor: 'u_rohit', text: 'added Taxi', amount: toPaise(1200), ts: '2026-09-10T08:05:00' },
-    { id: 'a4', type: 'payment_reported', actor: 'u_meera', text: 'reported ₹1,000 sent to Sam', amount: toPaise(1000), ts: '2026-09-11T18:20:00' },
-  ],
-};
-
-// A separate, unsaved draft (Section 5): dinner ₹1,200, ₹200 extra for Sam.
-export const UNEQUAL_DRAFT = {
-  desc: 'Dinner (draft)', amountPaise: toPaise(1200),
-  payers: [{ memberId: 'u_sam', paise: toPaise(1200) }],
-  participants: ['u_sam', 'u_ananya', 'u_rohit', 'u_meera'],
-  split: { mode: 'equalExtra', extras: { u_sam: toPaise(200) } },
-};
+// A fresh, empty personal account. New users start here — no demo groups, no
+// pre-seeded names. 'me' is the current user (renamed to the signed-in identity).
+export function personalEmpty(name = 'You') {
+  const initials = (String(name || 'You').trim().split(/\s+/).map((s) => s[0]).join('').slice(0, 2) || 'YO').toUpperCase();
+  return {
+    currentUserId: 'me',
+    members: [{ id: 'me', name: name || 'You', initials, you: true, status: 'joined' }],
+    groups: [], expenses: [], proposedPayments: [], confirmedPayments: [], activity: [],
+  };
+}
 
 function clone(x) { return JSON.parse(JSON.stringify(x)); }
 
@@ -57,12 +23,40 @@ function clone(x) { return JSON.parse(JSON.stringify(x)); }
 class PreviewAdapter {
   constructor() {
     this.mode = 'preview';
-    this.state = clone(SEED);
+    this.state = personalEmpty();
     this._seq = 100;
-    this.localMode = false;   // true once the user chooses "use without an account"
-    this._onPersist = null;   // optional hook (set by app.js) fired after each write
+    this.localMode = false;      // true once the user chooses "use without an account"
+    this._persistAlways = false; // true for signed-in users (persist per-user)
+    this._onPersist = null;      // optional hook (set by app.js) fired after each write
   }
   get currentUserId() { return this.state.currentUserId; }
+
+  // Rename the current user ('me') to the signed-in identity.
+  setIdentity(user) {
+    if (!user) return;
+    const me = this.member('me');
+    if (me) { me.name = user.name || me.name; me.initials = (String(user.name || 'You').trim().split(/\s+/).map((s) => s[0]).join('').slice(0, 2) || 'YO').toUpperCase(); me.email = user.email || null; }
+    this._persist();
+  }
+
+  // Delete a whole group and everything attached to it.
+  async deleteGroup(gid) {
+    this.state.groups = this.state.groups.filter((g) => g.id !== gid);
+    this.state.expenses = this.state.expenses.filter((e) => e.groupId !== gid);
+    this.state.proposedPayments = this.state.proposedPayments.filter((p) => p.groupId !== gid);
+    this.state.confirmedPayments = this.state.confirmedPayments.filter((p) => p.groupId !== gid);
+    this._persist();
+    return { ok: true };
+  }
+
+  // Delete a single expense.
+  async deleteExpense(eid) {
+    const e = this.expense(eid);
+    this.state.expenses = this.state.expenses.filter((x) => x.id !== eid);
+    if (e) this.state.activity.unshift({ id: 'a' + (++this._seq), type: 'expense_deleted', actor: this.state.currentUserId, text: `removed ${e.desc}`, ts: new Date().toISOString() });
+    this._persist();
+    return { ok: true };
+  }
 
   // Turn on local (no-account) persistence. Loads any saved session on this
   // device, otherwise keeps the current demo data. All later writes autosave.
@@ -73,7 +67,7 @@ class PreviewAdapter {
   }
   exportState() { return this.state; }
   importState(s) { if (s && Array.isArray(s.groups)) { this.state = s; this._seq = Math.max(this._seq, 1000); this._persist(); return true; } return false; }
-  _persist() { if (this.localMode && this._onPersist) { try { this._onPersist(this.state); } catch {} } }
+  _persist() { if ((this.localMode || this._persistAlways) && this._onPersist) { try { this._onPersist(this.state); } catch {} } }
   auth() { return { mode: 'preview', user: null }; }
   async signInPreview() {
     // Explicitly a SIMULATED session — never presented as real Google auth.
@@ -94,14 +88,14 @@ class PreviewAdapter {
 
   async createGroup({ name, memberNames = [], type, description }) {
     const gid = 'g_' + (++this._seq);
-    const memberIds = ['u_sam'];
+    const memberIds = [this.state.currentUserId];
     memberNames.forEach((n) => {
       const id = 'u_' + (++this._seq);
       this.state.members.push({ id, name: n, initials: n.slice(0, 2).toUpperCase(), status: 'invited' });
       memberIds.push(id);
     });
     this.state.groups.push({ id: gid, name, memberIds, archived: false, type, description });
-    this.state.activity.unshift({ id: 'a' + (++this._seq), type: 'group_created', actor: 'u_sam', text: `created ${name}`, ts: new Date().toISOString() });
+    this.state.activity.unshift({ id: 'a' + (++this._seq), type: 'group_created', actor: this.state.currentUserId, text: `created ${name}`, ts: new Date().toISOString() });
     this._persist();
     return { id: gid, saved: 'preview' };
   }
@@ -165,7 +159,7 @@ class PreviewAdapter {
     if (!p) return { ok: false };
     p.status = 'confirmed';
     this.state.confirmedPayments.push({ ...p });
-    this.state.activity.unshift({ id: 'a' + (++this._seq), type: 'receipt_confirmed', actor: 'u_sam', text: `confirmed ₹${(p.paise / 100).toLocaleString('en-IN')} from ${this.member(p.from)?.name}`, amount: p.paise, ts: new Date().toISOString() });
+    this.state.activity.unshift({ id: 'a' + (++this._seq), type: 'receipt_confirmed', actor: this.state.currentUserId, text: `confirmed ₹${(p.paise / 100).toLocaleString('en-IN')} from ${this.member(p.from)?.name}`, amount: p.paise, ts: new Date().toISOString() });
     this._persist();
     return { ok: true, saved: 'preview' };
   }
