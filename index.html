@@ -25,11 +25,13 @@
       anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdneGttYnJ6cWxpb2RzdW9xZWpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyMTc2MTUsImV4cCI6MjEwNDc5MzYxNX0.mFdCUsOe4jD0owBBGOZZHtW_ysdRYKJrWok68Dmpr7E',
       appUrl: 'https://sbdp.in/'
     };
+    // One-time cleanup of pre-refactor demo data (Sam/Goa sample) from older builds.
+    try { localStorage.removeItem('sbdp-local-session'); } catch (e) {}
   </script>
 </head>
 <body>
   <a href="#/home" class="skip">Skip to content</a>
   <div id="app" aria-live="polite"><noscript>SBDP requires JavaScript to run the interactive prototype.</noscript></div>
-  <script type="module" src="src/app.js"></script>
+  <script type="module" src="src/app.js?v=4"></script>
 </body>
 </html>

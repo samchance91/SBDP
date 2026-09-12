@@ -3,12 +3,20 @@
 // restored later. Nothing here contacts a server. The user is told, plainly, that
 // without an account their data lives only on this device.
 
-const KEY = 'sbdp-local-session';
+// Versioned key: bumping it abandons pre-refactor demo data (Sam/Goa sample)
+// that older builds saved on people's devices.
+const KEY = 'sbdp-local-session-v2';
+
+// One-time cleanup of any old-format session from earlier builds.
+try { localStorage.removeItem('sbdp-local-session'); } catch {}
+
+// Reject data that isn't the current empty-account format (e.g. old demo seed).
+function valid(s) { return s && Array.isArray(s.groups) && s.currentUserId === 'me' && !s.members?.some((m) => m.id === 'u_sam'); }
 
 // An optional key lets each signed-in user persist under their own namespace
 // (sbdp-user-<uid>), separate from the shared no-account session.
-export function hasLocal(key = KEY) { try { return !!localStorage.getItem(key); } catch { return false; } }
-export function loadLocal(key = KEY) { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : null; } catch { return null; } }
+export function hasLocal(key = KEY) { try { return valid(loadLocal(key)); } catch { return false; } }
+export function loadLocal(key = KEY) { try { const r = localStorage.getItem(key); const s = r ? JSON.parse(r) : null; if (r && !valid(s)) { localStorage.removeItem(key); return null; } return s; } catch { return null; } }
 export function saveLocal(state, key = KEY) { try { localStorage.setItem(key, JSON.stringify(state)); return true; } catch { return false; } }
 export function clearLocal(key = KEY) { try { localStorage.removeItem(key); } catch {} }
 

@@ -1,12 +1,12 @@
-import { makeAdapter } from './data.js';
-import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven } from './money.js';
-import { evaluate, roundToPaise } from './calc.js';
-import { t, setLang, getLang, LANGS, needsReview } from './i18n.js';
-import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js';
-import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js';
-import * as Share from './share.js';
-import * as Auth from './auth.js';
-import * as Local from './local.js';
+import { makeAdapter } from './data.js?v=4';
+import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven } from './money.js?v=4';
+import { evaluate, roundToPaise } from './calc.js?v=4';
+import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=4';
+import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=4';
+import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=4';
+import * as Share from './share.js?v=4';
+import * as Auth from './auth.js?v=4';
+import * as Local from './local.js?v=4';
 
 const db = makeAdapter();
 // No-account persistence: writes autosave to this device.
