@@ -22,7 +22,7 @@ const nameOf = (id) => db.member(id)?.name || '—';
 const avatarOf = (id, extra) => avatar(db.member(id), extra);
 
 function reviewBadge() {
-  if (db.mode !== 'preview') return '';
+  if (db.mode !== 'preview' || Auth.isSignedIn()) return '';
   return `<span class="pill" title="No backend configured — data is local preview only">${icon('info', 'i')}&nbsp;${esc(t('reviewMode'))}</span>`;
 }
 
@@ -58,7 +58,7 @@ function shell(active, content, { title = '', subtitle = '', action = '' } = {})
 
   return `${sidebar}<main class="app">${mobileHead}
     <div class="top"><div class="row">${reviewBadge()}${Auth.isSignedIn() ? `<span class="pill">${icon('check')}&nbsp;Signed in</span>` : ''}</div>
-      <div class="row" style="gap:14px">${saveButton()}<a class="link" href="#/gallery">${icon('info')} Prototype gallery</a></div></div>
+      <div class="row" style="gap:14px">${saveButton()}</div></div>
     ${localBar()}
     <div class="content">${titleBar}${content}</div></main>${bottomnav}`;
 }
