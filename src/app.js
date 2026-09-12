@@ -340,7 +340,12 @@ function openInvite(gid) {
     <label class="label">${esc(t('inviteLink'))}</label>
     <div class="input"><span class="small num" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(link)}</span>
       <button class="link" data-copy>${icon('copy')} ${esc(t('copyLink'))}</button></div>
-    <p class="fine mt8">Invited friends appear as “${esc(t('invited'))}” until they join. In a no-account build the link works on this device; with the backend configured it becomes a real, expiring invite.</p>
+    <div class="channels" style="margin:16px 0">
+      <button class="channel" data-share="whatsapp"><span>${icon('send')}</span>WhatsApp</button>
+      <button class="channel" data-share="email"><span>${icon('mail')}</span>Email</button>
+      <button class="channel" data-share="more"><span>${icon('share')}</span>${esc(t('moreApps'))}</button>
+    </div>
+    <p class="fine">Anyone can open this link — they can join with Google or use it without an account. Invited friends show as “${esc(t('invited'))}” until they join.</p>
     <div class="rule"></div>
     <div class="small muted">${members.map((m) => `<span class="pill" style="margin:2px">${esc(m.name)} · ${esc(m.status === 'joined' ? t('joined') : t('invited'))}</span>`).join('')}</div>
     </div>`;
@@ -351,6 +356,17 @@ function openInvite(gid) {
   ov.querySelector('[data-x]').onclick = () => { document.removeEventListener('keydown', key); close(); };
   ov.onclick = (e) => { if (e.target === ov) { document.removeEventListener('keydown', key); close(); } };
   ov.querySelector('[data-copy]').onclick = async () => { (await Share.copyText(link)) ? toast('Link copied') : toast('Copy unavailable'); };
+  const gname = db.group(gid)?.name || 'our group';
+  const inviteMsg = `Join “${gname}” on SBDP to split and settle our expenses:\n${link}`;
+  $$('[data-share]', ov).forEach((btn) => btn.onclick = async () => {
+    const k = btn.dataset.share;
+    if (k === 'whatsapp') window.open(Share.whatsappUrl(inviteMsg), '_blank');
+    else if (k === 'email') window.open(Share.emailUrl(`Join ${gname} on SBDP`, inviteMsg), '_blank');
+    else {
+      const r = await Share.nativeShare({ title: `Join ${gname} on SBDP`, text: inviteMsg, url: link });
+      if (r === 'unsupported') { (await Share.copyText(link)) ? toast('Link copied — paste it anywhere') : toast('Copy unavailable'); }
+    }
+  });
   ov.querySelector('[data-send]').onclick = async () => {
     const entries = $('#invnames', ov).value.split('\n').map((s) => s.trim()).filter(Boolean).map((line) => {
       const m = line.match(/^(.*?)\s*<([^>]+)>\s*$/);
