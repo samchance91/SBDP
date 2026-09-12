@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SBDP — Split Bills, Divide Payments</title>
+  <meta name="description" content="SBDP by Propelr.in — a minimal expense-splitting prototype.">
+  <meta name="theme-color" content="#f7f7f7">
+  <link rel="icon" href="assets/brand/sbdp-icon-32.png" sizes="32x32">
+  <link rel="apple-touch-icon" href="assets/brand/sbdp-icon-192.png">
+  <link rel="stylesheet" href="assets/fonts.css">
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="styles/app.css">
+  <!--
+    Backend configuration (optional). To enable real Google sign-in + Supabase,
+    set these before app.js loads (e.g. injected server-side). Leaving them unset
+    keeps the app in clearly-labelled preview mode. Never inline secrets here —
+    only the public anon key belongs client-side. See sbdp/.env.example.
+  -->
+  <script>
+    // window.SBDP_ENV = { url: 'https://YOUR-PROJECT.supabase.co', anonKey: 'PUBLIC_ANON_KEY' };
+  </script>
+</head>
+<body>
+  <a href="#/home" class="skip">Skip to content</a>
+  <div id="app" aria-live="polite"><noscript>SBDP requires JavaScript to run the interactive prototype.</noscript></div>
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

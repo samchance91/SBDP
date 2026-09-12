@@ -1,0 +1,24 @@
+/* SBDP additions on top of the design-pack base tokens/components. */
+:root { --warning: #8a4b00; --strong-border: #a8a8a8; }
+[data-theme=dark] { --warning: #ff9500; --strong-border: #555; }
+
+select.input { -webkit-appearance: none; appearance: none; background: var(--surface); }
+textarea.input { font: inherit; resize: vertical; }
+details > summary { cursor: pointer; }
+details.notice { display: block; }
+input[type=range] { accent-color: var(--accent); height: 6px; }
+.toast { transition: opacity .18s ease; }
+.nav-util:hover { color: var(--ink); }
+pre { overflow-x: auto; }
+/* Let 3-up stat columns shrink instead of forcing horizontal scroll on narrow phones. */
+.stats > div { min-width: 0; }
+.stats .num { overflow-wrap: anywhere; }
+@media (max-width: 400px) { .stats .num { font-size: 18px; } .stats { gap: 8px; } .stats > div + div { padding-left: 8px; } }
+.content { overflow-x: clip; }
+.channel:hover span { border-color: var(--strong-border); }
+.gallery-item { transition: border-color .18s ease; }
+.gallery-item:hover { border-color: var(--strong-border); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+/* Skip link */
+.skip { position: absolute; left: -999px; top: 8px; background: var(--ink); color: var(--surface); padding: 8px 14px; border-radius: 8px; z-index: 100; }
+.skip:focus { left: 8px; }
