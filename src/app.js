@@ -569,7 +569,7 @@ screens.share = () => {
   const stmt = Share.buildStatement({
     title: `${g.name} — SBDP statement`,
     lines: [`Group spending: ${formatINR(spend)}`, ...members.map((m) => `${m.name}: ${formatINR(bal[m.id], { sign: bal[m.id] !== 0 })}`), '', 'Settle up:', ...tx.map((x) => `${nameOf(x.from)} → ${nameOf(x.to)}: ${formatINR(x.paise)}`)],
-    footer: 'Shared from SBDP · by Propelr.in',
+    footer: `Created using SBDP\n${Share.appUrl()}`,
   });
 
   const channels = [['moreApps', 'share'], ['whatsapp', 'send'], ['telegram', 'send'], ['email', 'mail'], ['copyText', 'copy'], ['copyLink', 'link']];

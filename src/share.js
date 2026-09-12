@@ -16,6 +16,15 @@ export async function nativeShare(data) {
   catch (e) { if (e && e.name === 'AbortError') return 'cancelled'; return 'unsupported'; }
 }
 
+// Public web-app URL used in the "Created using SBDP" footer of shared messages.
+// Prefer an explicitly configured URL; otherwise fall back to where the app runs.
+export function appUrl() {
+  const env = (typeof window !== 'undefined' && window.SBDP_ENV) || null;
+  if (env && env.appUrl) return env.appUrl;
+  if (typeof location !== 'undefined') return location.origin + location.pathname.replace(/index\.html?$/, '');
+  return 'https://github.com/samchance91/SBDP';
+}
+
 export function whatsappUrl(text) { return `https://wa.me/?text=${encodeURIComponent(text)}`; }
 export function telegramUrl(text, url = '') { return `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`; }
 export function emailUrl(subject, body) { return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; }
