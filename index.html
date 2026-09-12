@@ -18,11 +18,13 @@
     only the public anon key belongs client-side. See sbdp/.env.example.
   -->
   <script>
-    // window.SBDP_ENV = {
-    //   url: 'https://YOUR-PROJECT.supabase.co',
-    //   anonKey: 'PUBLIC_ANON_KEY',
-    //   appUrl: 'https://your-domain.com/'   // link shown in shared "Created using SBDP" messages
-    // };
+    // Public config only (safe in the browser). Paste your Supabase anon/public key below.
+    // Do NOT put the service_role key or the Google client secret here.
+    window.SBDP_ENV = {
+      url: 'https://ggxkmbrzqliodsuoqejd.supabase.co',
+      anonKey: 'PASTE_YOUR_SUPABASE_ANON_PUBLIC_KEY_HERE',
+      appUrl: 'https://sbdp.in/'
+    };
   </script>
 </head>
 <body>
