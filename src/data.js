@@ -28,8 +28,18 @@ class PreviewAdapter {
     this.localMode = false;      // true once the user chooses "use without an account"
     this._persistAlways = false; // true for signed-in users (persist per-user)
     this._onPersist = null;      // optional hook (set by app.js) fired after each write
+    this.cloud = null;           // Cloud backend when signed in (writes sync to Supabase)
   }
   get currentUserId() { return this.state.currentUserId; }
+
+  // The caller's member id within a group (cloud: per-group; local: the 'me' member).
+  myMemberId(gid) { const gm = this.groupMembers(gid); const you = gm.find((m) => m.you); return you ? you.id : this.state.currentUserId; }
+
+  // Replace the whole in-memory store from the cloud snapshot.
+  async hydrate() { if (this.cloud) { this.state = await this.cloud.snapshot(); return true; } return false; }
+
+  // Back to a clean empty account (e.g. after sign-out).
+  resetEmpty() { this.state = personalEmpty(); this.cloud = null; this.localMode = false; this._persistAlways = false; this._onPersist = null; }
 
   // Rename the current user ('me') to the signed-in identity.
   setIdentity(user) {
@@ -41,6 +51,7 @@ class PreviewAdapter {
 
   // Delete a whole group and everything attached to it.
   async deleteGroup(gid) {
+    if (this.cloud) { const r = await this.cloud.deleteGroup(gid); await this.hydrate(); return r; }
     this.state.groups = this.state.groups.filter((g) => g.id !== gid);
     this.state.expenses = this.state.expenses.filter((e) => e.groupId !== gid);
     this.state.proposedPayments = this.state.proposedPayments.filter((p) => p.groupId !== gid);
@@ -51,6 +62,7 @@ class PreviewAdapter {
 
   // Delete a single expense.
   async deleteExpense(eid) {
+    if (this.cloud) { const r = await this.cloud.deleteExpense(eid); await this.hydrate(); return r; }
     const e = this.expense(eid);
     this.state.expenses = this.state.expenses.filter((x) => x.id !== eid);
     if (e) this.state.activity.unshift({ id: 'a' + (++this._seq), type: 'expense_deleted', actor: this.state.currentUserId, text: `removed ${e.desc}`, ts: new Date().toISOString() });
@@ -87,6 +99,7 @@ class PreviewAdapter {
   activity() { return [...this.state.activity].sort((a, b) => b.ts.localeCompare(a.ts)); }
 
   async createGroup({ name, memberNames = [], type, description }) {
+    if (this.cloud) { const r = await this.cloud.createGroup({ name, memberNames, type, description }); await this.hydrate(); return r; }
     const gid = 'g_' + (++this._seq);
     const memberIds = [this.state.currentUserId];
     memberNames.forEach((n) => {
@@ -103,6 +116,7 @@ class PreviewAdapter {
   // Invite friends to a group by name (+ optional email). They become 'invited'
   // ledger entities until they accept and their account is claimed.
   async inviteMembers(gid, entries = []) {
+    if (this.cloud) { const r = await this.cloud.inviteMembers(gid, entries); await this.hydrate(); return r; }
     const g = this.group(gid);
     if (!g) return { added: [] };
     const added = [];
@@ -120,14 +134,16 @@ class PreviewAdapter {
     return { added, saved: 'preview' };
   }
 
-  // A shareable invite link (scope='invite'), expiring + revocable in the schema.
-  createInviteLink(gid) {
+  // A shareable invite link. Cloud mints a real token; local is device-scoped.
+  async inviteLink(gid) {
+    if (this.cloud) return this.cloud.inviteLink(gid);
     const token = 'inv_' + Math.random().toString(36).slice(2, 10);
     return `${location.origin}${location.pathname}#/join?g=${gid}&t=${token}`;
   }
 
   // Idempotent by clientId. Returns { id, saved: 'preview' }.
   async saveExpense(exp, clientId) {
+    if (this.cloud) { const r = await this.cloud.saveExpense({ ...exp, clientId }); await this.hydrate(); return r; }
     if (clientId) {
       const dup = this.state.expenses.find((e) => e.clientId === clientId);
       if (dup) return { id: dup.id, saved: 'preview', duplicate: true };
@@ -148,6 +164,7 @@ class PreviewAdapter {
   }
 
   async reportPayment(gid, from, to, paise) {
+    if (this.cloud) { const r = await this.cloud.reportPayment(gid, from, to, paise); await this.hydrate(); return r; }
     const id = 'p_' + (++this._seq);
     this.state.proposedPayments.push({ id, groupId: gid, from, to, paise, status: 'reported' });
     this._persist();
@@ -155,6 +172,7 @@ class PreviewAdapter {
   }
   // Confirmation moves a proposed payment into the authoritative ledger.
   async confirmPayment(pid) {
+    if (this.cloud) { const r = await this.cloud.confirmPayment(pid); await this.hydrate(); return r; }
     const p = this.state.proposedPayments.find((x) => x.id === pid);
     if (!p) return { ok: false };
     p.status = 'confirmed';

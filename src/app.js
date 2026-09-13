@@ -1,12 +1,13 @@
-import { makeAdapter } from './data.js?v=4';
-import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven } from './money.js?v=4';
-import { evaluate, roundToPaise } from './calc.js?v=4';
-import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=4';
-import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=4';
-import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=4';
-import * as Share from './share.js?v=4';
-import * as Auth from './auth.js?v=4';
-import * as Local from './local.js?v=4';
+import { makeAdapter } from './data.js?v=5';
+import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven } from './money.js?v=5';
+import { evaluate, roundToPaise } from './calc.js?v=5';
+import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=5';
+import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=5';
+import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=5';
+import * as Share from './share.js?v=5';
+import * as Auth from './auth.js?v=5';
+import * as Local from './local.js?v=5';
+import { Cloud } from './cloud.js?v=5';
 
 const db = makeAdapter();
 // No-account persistence: writes autosave to this device.
@@ -153,8 +154,7 @@ screens.login = () => {
 
 // B. Dashboard
 screens.home = () => {
-  const me = db.currentUserId;
-  const uname = (db.member(me)?.name || 'there').split(' ')[0];
+  const uname = ((Auth.currentUser()?.name) || db.member(db.currentUserId)?.name || 'there').split(' ')[0];
   const groups = db.groups();
 
   if (groups.length === 0) {
@@ -170,7 +170,7 @@ screens.home = () => {
   let owe = 0, owed = 0;
   const groupRows = groups.map((gr) => {
     const gm = db.groupMembers(gr.id);
-    const b = computeBalances(gm, db.expenses(gr.id)).bal[me] || 0;
+    const b = computeBalances(gm, db.expenses(gr.id)).bal[db.myMemberId(gr.id)] || 0;
     if (b < 0) owe += -b; else owed += b;
     const last = db.expenses(gr.id).slice(-1)[0];
     return `<a class="expense" href="#/group/${gr.id}">
@@ -203,7 +203,7 @@ screens.home = () => {
 
 function expenseRow(e) {
   const { shares } = computeShares(e);
-  const mine = shares[db.currentUserId] || 0;
+  const mine = shares[db.myMemberId(e.groupId || state.group)] || 0;
   const payer = e.payers[0];
   return `<a class="expense" href="#/expense/${e.id}">
     <span class="round">${icon('receipt')}</span>
@@ -274,8 +274,8 @@ screens.group = (id, params) => {
       <button class="link" id="delgroup" style="background:none;border:0;padding:0;color:var(--error)">${icon('trash')} ${esc(t('deleteGroup'))}</button></div></div>
     <div class="card stats">
       <div><div class="small muted">${esc(t('groupSpending'))}</div><div class="num">${formatINR(spend)}</div></div>
-      <div><div class="small muted">${esc(t('yourShare'))}</div><div class="num">${formatINR(owed[db.currentUserId])}</div></div>
-      <div><div class="small muted">${esc(t('youPaid'))}</div><div class="num">${formatINR(paid[db.currentUserId])}</div></div>
+      <div><div class="small muted">${esc(t('yourShare'))}</div><div class="num">${formatINR(owed[db.myMemberId(g.id)] || 0)}</div></div>
+      <div><div class="small muted">${esc(t('youPaid'))}</div><div class="num">${formatINR(paid[db.myMemberId(g.id)] || 0)}</div></div>
     </div>`;
 
   const tabs = `<div class="tabs">
@@ -325,10 +325,11 @@ function confirmDialog(title, body, onYes) {
 }
 
 // Invite friends dialog: add by name/email, or copy a shareable invite link.
-function openInvite(gid) {
+async function openInvite(gid) {
   state.focusReturn = document.activeElement;
   const members = db.groupMembers(gid);
-  const link = db.createInviteLink(gid);
+  let link;
+  try { link = await db.inviteLink(gid); } catch (e) { toast('Could not create invite link: ' + e.message); return; }
   const ov = document.createElement('div');
   ov.className = 'overlay'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', t('inviteFriends'));
   ov.innerHTML = `<div class="dialog"><div class="handle"></div>
@@ -392,7 +393,7 @@ function activityList(items) {
 const draft = { groupId: null, amountPaise: 0, desc: '', payers: [{ memberId: 'me', paise: 0 }], participants: [], split: { mode: 'equal' } };
 function resetDraftFor(gid) {
   draft.groupId = gid; draft.amountPaise = 0; draft.desc = ''; draft.split = { mode: 'equal' };
-  draft.payers = [{ memberId: db.currentUserId, paise: 0 }];
+  draft.payers = [{ memberId: db.myMemberId(gid), paise: 0 }];
   draft.participants = db.groupMembers(gid).map((m) => m.id);
 }
 screens.add = () => {
@@ -656,42 +657,52 @@ screens.share = () => {
   });
 };
 
-// I. Settle up (pre / post confirmation states)
-screens.settle = (arg, params) => {
+// I. Settle up — record payments and confirm receipts (real).
+screens.settle = () => {
   const g = db.group(state.group) || db.groups()[0];
   if (!g) { go('#/home'); return; }
   state.group = g.id;
   const members = db.groupMembers(g.id);
-  const post = params.get('state') === 'post';
+  const myId = db.myMemberId(g.id);
+  const confirmed = db.confirmedPayments(g.id).map((p) => ({ from: p.from, to: p.to, paise: p.paise }));
   const base = computeBalances(members, db.expenses(g.id)).bal;
-  const proposed = db.proposedPayments(g.id)[0];
-  const confirmedList = post && proposed ? [{ from: proposed.from, to: proposed.to, paise: proposed.paise }] : [];
-  const tx = settle(base, confirmedList);
+  const tx = settle(base, confirmed);
+  const reported = db.proposedPayments(g.id);
 
-  const meera = proposed;
-  const statusChip = post
-    ? `<span class="pill yellow">${icon('check')} ${esc(t('confirmedReceived'))}</span>`
-    : `<span class="pill">${esc(t('reportedSent'))}</span>`;
+  const txRows = tx.length ? tx.map((x) => {
+    const iPay = x.from === myId;
+    return `<div class="transfer">${avatarOf(x.from)}<span class="who"><strong>${esc(nameOf(x.from))}</strong> → <strong>${esc(nameOf(x.to))}</strong>${iPay ? `<p class="small muted">You pay</p>` : ''}</span>
+      <span class="num">${formatINR(x.paise)}</span>
+      ${iPay ? `<button class="btn secondary" data-pay="${x.from}|${x.to}|${x.paise}">${esc(t('recordPayment'))}</button>` : ''}</div>`;
+  }).join('') : `<p class="muted">${esc(t('settledUp'))} 🎉</p>`;
+
+  const reportedRows = reported.map((p) => {
+    const iReceive = p.to === myId;
+    const chip = p.status === 'confirmed' ? `<span class="pill yellow">${icon('check')} ${esc(t('confirmedReceived'))}</span>` : `<span class="pill">${esc(t('reportedSent'))}</span>`;
+    return `<div class="transfer">${avatarOf(p.from)}<span class="who"><strong>${esc(nameOf(p.from))}</strong> → <strong>${esc(nameOf(p.to))}</strong><p class="small muted">${chip}</p></span>
+      <span class="num">${formatINR(p.paise)}</span>
+      ${(iReceive && p.status !== 'confirmed') ? `<button class="btn" data-confirm="${p.id}">${esc(t('confirmedReceived'))}</button>` : ''}</div>`;
+  }).join('');
 
   app.innerHTML = shell('groups', `<div class="narrow"><a class="link back" href="#/group/${g.id}?tab=balances">${icon('arrowLeft')} ${esc(t('tab_balances'))}</a>
-    <div class="card">${tx.map((x) => `<div class="transfer">${avatarOf(x.from)}<span class="who"><strong>${esc(nameOf(x.from))}</strong> → <strong>${esc(nameOf(x.to))}</strong></span>
-      <span class="num">${formatINR(x.paise)}</span><a class="btn secondary" href="#!" data-pay="${x.from}">${esc(t('recordPayment'))}</a></div>`).join('')}
-    </div>
+    <div class="card">${txRows}</div>
     <details class="notice" style="cursor:pointer"><summary>How is this calculated?</summary>
-      <div class="mt8">Everyone’s share is ${formatINR(computeBalances(members, db.expenses(g.id)).owed[db.currentUserId])}. We net each person’s paid vs. owed, then match debtors to creditors with the fewest transfers.</div></details>
-
-    ${meera ? `<div class="section mt"><h2>Reported payment</h2></div>
-    <div class="card"><div class="transfer">${avatarOf(meera.from)}<span class="who"><strong>${esc(nameOf(meera.from))}</strong> → <strong>${esc(nameOf(meera.to))}</strong><p class="small muted">${statusChip}</p></span>
-      <span class="num">${formatINR(meera.paise)}</span></div>
-      ${post ? `<div class="notice">${icon('check')}<div>Confirmed. Sam is now owed ${formatINR(settle(base, confirmedList).filter(x=>x.to===db.currentUserId).reduce((s,x)=>s+x.paise,0))}. ${esc(nameOf(meera.from))} owes ${formatINR(-(base[meera.from]+meera.paise))} — ${esc(t('remaining'))}.</div></div>`
-      : `<div class="notice">${icon('info')}<div>${esc(nameOf(meera.from))} reported this. Until Sam confirms, the authoritative balance is unchanged. Opening a payment app does not confirm receipt.</div>
-         <div class="row mt16" style="gap:10px"><a class="btn" href="#/settle?state=post" id="confirm">${esc(t('confirmedReceived'))}</a><button class="btn secondary">Not yet</button></div>`}
-    </div>` : ''}
-
-    <div class="segments mt16" style="max-width:320px"><a class="${!post ? 'active' : ''}" href="#/settle">Before confirm</a><a class="${post ? 'active' : ''}" href="#/settle?state=post">After confirm</a></div>
+      <div class="mt8">Each person’s balance is netted from what they paid vs. owed, then we match debtors to creditors with the fewest transfers.</div></details>
+    ${reported.length ? `<div class="section mt"><h2>Reported payments</h2></div><div class="card">${reportedRows}</div>
+      <div class="notice">${icon('info')}<div>A reported payment only updates balances once the person receiving it confirms. Opening a payment app doesn’t confirm receipt.</div></div>` : ''}
     </div>`, { title: esc(t('settleUp')) });
 
-  $$('[data-pay]').forEach((b) => b.onclick = (e) => { e.preventDefault(); toast('Opening payment — this does not mark it received.'); });
+  $$('[data-pay]').forEach((b) => b.onclick = async () => {
+    const [from, to, paise] = b.dataset.pay.split('|');
+    b.disabled = true;
+    try { await db.reportPayment(g.id, from, to, Number(paise)); toast('Payment recorded — waiting for confirmation'); screens.settle(); }
+    catch (e) { b.disabled = false; toast('Could not record: ' + e.message); }
+  });
+  $$('[data-confirm]').forEach((b) => b.onclick = async () => {
+    b.disabled = true;
+    try { await db.confirmPayment(b.dataset.confirm); toast('Payment confirmed'); screens.settle(); }
+    catch (e) { b.disabled = false; toast('Could not confirm: ' + e.message); }
+  });
 };
 
 // J. Activity + states
@@ -745,20 +756,31 @@ screens.language = () => {
   $$('[data-lang]').forEach((b) => b.onclick = () => { setLang(b.dataset.lang); document.documentElement.lang = b.dataset.lang; screens.language(); });
 };
 
-// Invite-link landing.
-screens.join = (params) => {
-  const gid = params.get('g');
-  const g = db.group(gid);
+// Invite-link landing. Cloud links carry ?token=; a signed-in user joins the
+// real group, a signed-out user is sent to Google first and joins on return.
+screens.join = async (params) => {
+  const token = params.get('token');
+  const legacyGid = params.get('g');
+
+  // Signed in + real token → join the shared group now.
+  if (token && db.cloud && Auth.isSignedIn()) {
+    app.innerHTML = `<div class="login"><div class="login-left">${lockup(true)}<div class="login-copy"><h1>Joining…</h1><p class="muted">Adding you to the group.</p></div></div></div>`;
+    try { const gid = await db.cloud.join(token); await db.hydrate(); state.group = gid; go(`#/group/${gid}`); }
+    catch (e) { app.innerHTML = `<div class="login"><div class="login-left">${lockup(true)}<div class="login-copy"><h1>Invite problem</h1><p class="muted">${esc(e.message)}</p><a class="btn" href="#/home">Go home</a></div></div></div>`; }
+    return;
+  }
+
+  const g = legacyGid ? db.group(legacyGid) : null;
   const name = g ? g.name : 'a group';
   app.innerHTML = `<div class="login"><div class="login-left">${lockup(true)}
     <div class="login-copy"><h1>You’re invited to ${esc(name)}</h1>
-      <p>Join to see who paid what and settle up. Sign in with Google, or continue on this device without an account.</p>
+      <p>Join to see who paid what and settle up.</p>
       ${Auth.configured() ? `<button class="btn google" id="gbtn"><img src="assets/google-g.png" alt="">${esc(t('continueGoogle'))}</button>` : ''}
       <button class="btn ${Auth.configured() ? 'secondary' : ''} wide" id="joinlocal" style="margin-top:12px">${g ? 'Open ' + esc(name) : esc(t('useWithoutAccount'))}</button>
-      <p class="fine mt16">${g ? '' : 'This invite link isn’t recognised on this device — the group lives where it was created.'}</p>
+      <p class="fine mt16">${token ? 'Sign in with Google to join this shared group.' : (g ? '' : 'This invite link isn’t recognised on this device.')}</p>
     </div></div><div class="login-right">${lockup(false)}</div></div>`;
-  const gb = $('#gbtn'); if (gb) gb.onclick = async () => { try { await Auth.signInWithGoogle('#/group/' + gid); } catch {} };
-  $('#joinlocal').onclick = () => { db.enableLocal(Local.loadLocal()); state.noAccount = true; go(g ? '#/group/' + gid : '#/home'); };
+  const gb = $('#gbtn'); if (gb) gb.onclick = async () => { try { await Auth.signInWithGoogle(token ? `#/join?token=${encodeURIComponent(token)}` : (legacyGid ? '#/group/' + legacyGid : '#/home')); } catch {} };
+  $('#joinlocal').onclick = () => { db.enableLocal(Local.loadLocal()); state.noAccount = true; go(g ? '#/group/' + legacyGid : '#/home'); };
 };
 
 // Review gallery (prototype tool — outside product UI)
@@ -834,13 +856,21 @@ window.addEventListener('online', () => router());
 
 window.addEventListener('hashchange', router);
 
-function applyIdentity(u) {
-  const key = 'sbdp-user-' + u.id;
-  db._onPersist = (s) => Local.saveLocal(s, key);
-  db._persistAlways = true;
-  const saved = Local.loadLocal(key);
-  if (saved && Array.isArray(saved.groups)) db.importState(saved);
-  db.setIdentity(u);
+// Signed in → connect the cloud backend and load the shared data. Data lives in
+// Supabase and syncs across devices; no local banner.
+async function applyIdentity(u) {
+  db.localMode = false; db._persistAlways = false; db._onPersist = null; state.noAccount = false;
+  try {
+    const client = await Auth.supabase();
+    if (!client) throw new Error('no client');
+    db.cloud = new Cloud(client);
+    db.setIdentity(u);
+    await db.hydrate();
+  } catch (e) {
+    console.error('[SBDP] cloud sync unavailable', e);
+    db.cloud = null;
+    toast('Cloud sync isn’t ready yet. Your data may be limited until setup completes.', 4000);
+  }
 }
 
 async function boot() {
@@ -851,13 +881,16 @@ async function boot() {
   await Auth.init();
   const u = Auth.currentUser();
   if (u) {
-    // Signed in: personal account persisted under this user's namespace. No banner.
-    applyIdentity(u);
+    await applyIdentity(u);
   } else if (Local.hasLocal()) {
     // Resume a saved no-account session on this device.
     db.enableLocal(Local.loadLocal()); state.noAccount = true;
   }
-  Auth.onChange((user) => { if (user) applyIdentity(user); router(); });
+  Auth.onChange(async (user) => {
+    if (user && !db.cloud) await applyIdentity(user);
+    else if (!user) db.resetEmpty();
+    router();
+  });
   if (u && (location.hash === '' || location.hash.startsWith('#/login'))) {
     const back = Auth.takeReturn(); location.hash = back || '#/home';
   }
