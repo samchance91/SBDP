@@ -41,6 +41,15 @@ class PreviewAdapter {
   // Back to a clean empty account (e.g. after sign-out).
   resetEmpty() { this.state = personalEmpty(); this.cloud = null; this.localMode = false; this._persistAlways = false; this._onPersist = null; }
 
+  // Set the current user's display name (works in both local and cloud mode).
+  async setMyName(name) {
+    const nm = String(name || '').trim(); if (!nm) return { ok: false };
+    if (this.cloud) { try { await this.cloud.updateMyName(nm); await this.hydrate(); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; } }
+    const me = this.member(this.state.currentUserId);
+    if (me) { me.name = nm; me.initials = (nm.split(/\s+/).map((s) => s[0]).join('').slice(0, 2) || 'YO').toUpperCase(); }
+    this._persist(); return { ok: true };
+  }
+
   // Rename the current user ('me') to the signed-in identity.
   setIdentity(user) {
     if (!user) return;

@@ -1,14 +1,14 @@
-import { makeAdapter } from './data.js?v=10';
-import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven, pairwiseItems, directDebts, contributions, analytics } from './money.js?v=10';
-import { evaluate, roundToPaise } from './calc.js?v=10';
-import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=10';
-import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=10';
-import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=10';
-import * as Share from './share.js?v=10';
-import * as Auth from './auth.js?v=10';
-import * as Local from './local.js?v=10';
-import { Cloud } from './cloud.js?v=10';
-import { CATEGORIES, CAT_LABEL, categoryIcon } from './categories.js?v=10';
+import { makeAdapter } from './data.js?v=11';
+import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven, pairwiseItems, directDebts, contributions, analytics } from './money.js?v=11';
+import { evaluate, roundToPaise } from './calc.js?v=11';
+import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=11';
+import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=11';
+import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=11';
+import * as Share from './share.js?v=11';
+import * as Auth from './auth.js?v=11';
+import * as Local from './local.js?v=11';
+import { Cloud } from './cloud.js?v=11';
+import { CATEGORIES, CAT_LABEL, categoryIcon } from './categories.js?v=11';
 
 const db = makeAdapter();
 // No-account persistence: writes autosave to this device.
@@ -367,6 +367,26 @@ function confirmDialog(title, body, onYes) {
   ov.onclick = (e) => { if (e.target === ov) close(); };
   ov.querySelector('[data-yes]').onclick = async () => { close(); await onYes(); };
   ov.querySelector('[data-yes]').focus();
+}
+
+// Simple single-field prompt dialog.
+function openPrompt(title, body, value, onOk) {
+  state.focusReturn = document.activeElement;
+  const ov = document.createElement('div');
+  ov.className = 'overlay'; ov.setAttribute('role', 'dialog');
+  ov.innerHTML = `<div class="dialog"><div class="handle"></div>
+    <div class="row between"><h2>${esc(title)}</h2><button class="iconbtn" data-x aria-label="Close">${icon('x')}</button></div>
+    ${body ? `<p class="muted small mt8">${esc(body)}</p>` : ''}
+    <div class="field"><input id="promptval" value="${esc(value || '')}"></div>
+    <button class="btn wide" data-ok>Save</button></div>`;
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); state.focusReturn && state.focusReturn.focus && state.focusReturn.focus(); };
+  ov.querySelector('[data-x]').onclick = close;
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  const submit = async () => { const v = $('#promptval', ov).value.trim(); if (!v) return; close(); await onOk(v); };
+  ov.querySelector('[data-ok]').onclick = submit;
+  $('#promptval', ov).onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
+  $('#promptval', ov).focus(); $('#promptval', ov).select();
 }
 
 // Friends list — add by email, favourite, remove.
@@ -989,9 +1009,11 @@ screens.settings = () => {
   const mode = getThemeMode();
   const seg = (v, label) => `<a data-theme-set="${v}" href="#!" class="${mode === v ? 'active' : ''}">${esc(t(label))}</a>`;
   const u = Auth.currentUser();
-  const profile = u
-    ? `<div class="row">${u.avatar ? `<img src="${esc(u.avatar)}" width="40" height="40" style="border-radius:50%" alt="">` : `<span class="avatar you">${esc((u.name || '?').slice(0, 2).toUpperCase())}</span>`}<div><strong>${esc(u.name)}</strong><div class="small muted">${esc(u.email || '')}</div></div></div>`
-    : `<div class="row">${avatarOf(db.currentUserId)}<div><strong>Sam</strong><div class="small muted">${db.localMode ? 'No account · on this device' : esc(t('reviewMode'))}</div></div></div>`;
+  const myName = db.member(db.currentUserId)?.name || u?.name || 'You';
+  const sub = u ? esc(u.email || '') : (db.localMode ? 'No account · on this device' : esc(t('reviewMode')));
+  const avatarHtml = u && u.avatar ? `<img src="${esc(u.avatar)}" width="40" height="40" style="border-radius:50%" alt="">` : avatarOf(db.currentUserId);
+  const profile = `<div class="row between"><div class="row">${avatarHtml}<div><strong id="myname">${esc(myName)}</strong><div class="small muted">${sub}</div></div></div>
+    <button class="link" id="editname">${icon('edit')} Edit name</button></div>`;
   const signedIn = Auth.isSignedIn();
   app.innerHTML = shell('settings', `<div class="narrow">
     <div class="card">${profile}</div>
@@ -1014,6 +1036,13 @@ screens.settings = () => {
   </div>`, { title: esc(t('nav_settings')) });
   $$('[data-theme-set]').forEach((a) => a.onclick = (e) => { e.preventDefault(); applyTheme(a.dataset.themeSet); screens.settings(); });
   const so = $('#signout'); if (so) so.onclick = async () => { await Auth.signOut(); go('#/login'); };
+  const en = $('#editname'); if (en) en.onclick = () => {
+    const cur = db.member(db.currentUserId)?.name || '';
+    openPrompt('Your name', 'This is how you appear in groups.', cur, async (val) => {
+      const r = await db.setMyName(val);
+      if (r.ok) { toast('Name updated'); screens.settings(); } else toast('Could not update' + (r.error ? ': ' + r.error : ''));
+    });
+  };
   if (window.__sbdpInstall) { const row = $('#installrow'); if (row) { row.hidden = false; $('#installbtn').onclick = async () => { window.__sbdpInstall.prompt(); const r = await window.__sbdpInstall.userChoice; if (r && r.outcome === 'accepted') { window.__sbdpInstall = null; row.hidden = true; } }; } }
 };
 

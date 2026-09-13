@@ -1,7 +1,7 @@
 // SBDP service worker — offline shell. Network-first for same-origin GETs so
 // updates always come through, with a cache fallback when offline. Cross-origin
 // requests (Supabase API, esm.sh) are never intercepted.
-const CACHE = 'sbdp-cache-v10';
+const CACHE = 'sbdp-cache-v11';
 const CORE = ['./', './index.html', './styles/base.css', './styles/app.css', './assets/fonts.css', './manifest.json'];
 
 self.addEventListener('install', (e) => {

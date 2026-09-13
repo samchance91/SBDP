@@ -1,5 +1,5 @@
 -- SBDP — complete backend setup. Run ONCE in Supabase SQL Editor after schema.sql.
--- Combines sync + phase1 (rich expenses) + phase3 (friends/roles). Safe to re-run.
+-- Combines sync + phase1 + phase3 + phase3b. Safe to re-run.
 
 -- ===== sync.sql =====
 -- SBDP cross-device sync layer.
@@ -394,3 +394,14 @@ $$;
 
 grant execute on function sbdp_role(uuid), update_group(uuid, text, text, text), set_member_role(uuid, text),
   remove_member(uuid), leave_group(uuid), add_friend(text, text), toggle_favourite_friend(text), remove_friend(text) to authenticated;
+
+-- ===== phase3b.sql =====
+-- SBDP — let a signed-in user set their display name across their groups.
+-- Run in the Supabase SQL Editor (safe to re-run).
+create or replace function update_my_name(p_name text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if coalesce(trim(p_name),'') = '' then raise exception 'name required'; end if;
+  update group_members set display_name = trim(p_name) where user_id = auth.uid();
+end; $$;
+grant execute on function update_my_name(text) to authenticated;
