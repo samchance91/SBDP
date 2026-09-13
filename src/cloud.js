@@ -3,7 +3,7 @@
 // snapshot into the in-memory store shape the screens already understand.
 // Every group's data is shared across all its members, on every device.
 
-import { computeShares } from './money.js?v=8';
+import { computeShares } from './money.js?v=9';
 
 const initialsOf = (name) => (String(name || '?').trim().split(/\s+/).map((s) => s[0]).join('').slice(0, 2) || '?').toUpperCase();
 

@@ -58,6 +58,7 @@ const en = {
   friends: 'Friends', addFriend: 'Add friend', manageMembers: 'Members', editGroup: 'Edit group',
   leaveGroup: 'Leave group', role: 'Role', owner: 'Owner', admin: 'Admin', member: 'Member', viewer: 'Viewer',
   remove: 'Remove', favourite: 'Favourite', noFriends: 'No friends yet',
+  reports: 'Reports', installApp: 'Install app',
 };
 
 // Non-English catalogues fall back to English for any missing key (see t()).

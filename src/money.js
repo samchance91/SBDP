@@ -187,6 +187,23 @@ export function directDebts(members, expenses, confirmed = []) {
   return out.sort((x, y) => y.paise - x.paise);
 }
 
+// Analytics over a set of expenses: totals and breakdowns by category, month,
+// and person (paid vs share). All in paise.
+export function analytics(members, expenses) {
+  const byCategory = {}; const byMonth = {}; let total = 0;
+  expenses.forEach((e) => {
+    total += e.amountPaise;
+    const cat = e.category || 'misc';
+    byCategory[cat] = (byCategory[cat] || 0) + e.amountPaise;
+    const ym = (e.date || '').slice(0, 7) || 'unknown';
+    byMonth[ym] = (byMonth[ym] || 0) + e.amountPaise;
+  });
+  const { paid, owed } = computeBalances(members, expenses);
+  const byPerson = members.map((m) => ({ id: m.id, name: m.name, paid: paid[m.id] || 0, share: owed[m.id] || 0 }));
+  const largest = expenses.reduce((a, b) => (b.amountPaise > (a?.amountPaise || 0) ? b : a), null);
+  return { total, count: expenses.length, avg: expenses.length ? Math.round(total / expenses.length) : 0, byCategory, byMonth, byPerson, largest };
+}
+
 // Contribution view: what each member paid vs their fair share (what they owe).
 // diff = paid - fair (negative = has paid less than their share so far).
 export function contributions(members, expenses) {

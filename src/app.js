@@ -1,14 +1,14 @@
-import { makeAdapter } from './data.js?v=8';
-import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven, pairwiseItems, directDebts, contributions } from './money.js?v=8';
-import { evaluate, roundToPaise } from './calc.js?v=8';
-import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=8';
-import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=8';
-import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=8';
-import * as Share from './share.js?v=8';
-import * as Auth from './auth.js?v=8';
-import * as Local from './local.js?v=8';
-import { Cloud } from './cloud.js?v=8';
-import { CATEGORIES, CAT_LABEL, categoryIcon } from './categories.js?v=8';
+import { makeAdapter } from './data.js?v=9';
+import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven, pairwiseItems, directDebts, contributions, analytics } from './money.js?v=9';
+import { evaluate, roundToPaise } from './calc.js?v=9';
+import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=9';
+import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=9';
+import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=9';
+import * as Share from './share.js?v=9';
+import * as Auth from './auth.js?v=9';
+import * as Local from './local.js?v=9';
+import { Cloud } from './cloud.js?v=9';
+import { CATEGORIES, CAT_LABEL, categoryIcon } from './categories.js?v=9';
 
 const db = makeAdapter();
 // No-account persistence: writes autosave to this device.
@@ -914,6 +914,57 @@ screens.settle = () => {
 screens.activity = () => {
   app.innerHTML = shell('activity', activityList(db.activity()), { title: esc(t('nav_activity')), subtitle: 'Who did what, and when.' });
 };
+
+// Reports & analytics (rule-based; charts are inline bars).
+const monthName = (ym) => { const [y, m] = ym.split('-'); return new Date(y, (m || 1) - 1, 1).toLocaleString('en-IN', { month: 'short', year: 'numeric' }); };
+function barRow(label, value, max, sub = '') {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+  return `<div style="padding:8px 0"><div class="row between"><span class="small">${label}</span><span class="small num">${formatINR(value)}${sub}</span></div>
+    <div class="bar"><i style="width:${pct}%;background:var(--accent)"></i></div></div>`;
+}
+screens.reports = () => {
+  const groups = db.groups();
+  if (!groups.length) { app.innerHTML = shell('reports', `<div class="card empty"><img src="assets/brand/empty-receipt.svg" alt=""><p>No data yet. Create a group and add expenses to see reports.</p><a class="btn" href="#/new-group">${icon('plus')} ${esc(t('createGroup'))}</a></div>`, { title: esc(t('reports')) }); return; }
+  const gid = (state.reportGroup && db.group(state.reportGroup)) ? state.reportGroup : groups[0].id;
+  state.reportGroup = gid;
+  const g = db.group(gid);
+  const members = db.groupMembers(gid);
+  const expenses = db.expenses(gid);
+  const a = analytics(members, expenses);
+  const catMax = Math.max(1, ...Object.values(a.byCategory));
+  const monMax = Math.max(1, ...Object.values(a.byMonth));
+  const perMax = Math.max(1, ...a.byPerson.map((p) => p.paid));
+
+  const picker = groups.length > 1 ? `<select id="rgsel" class="input" style="width:auto;height:40px">${groups.map((gr) => `<option value="${gr.id}" ${gr.id === gid ? 'selected' : ''}>${esc(gr.name)}</option>`).join('')}</select>` : '';
+
+  const content = `<div class="row between" style="margin-bottom:12px">${picker}<div class="row" style="gap:10px">
+      <button class="btn secondary" id="csv">${icon('arrowUpRight')} CSV</button>
+      <button class="btn secondary" id="print">${icon('receipt')} PDF</button></div></div>
+    <div id="reportcard">
+      <div class="print-only" style="margin-bottom:12px"><strong>${esc(g.name)} — SBDP report</strong><div class="small muted">${esc(new Date().toLocaleDateString('en-IN'))}</div></div>
+      <div class="card stats">
+        <div><div class="small muted">Total spent</div><div class="num">${formatINR(a.total)}</div></div>
+        <div><div class="small muted">Expenses</div><div class="num">${a.count}</div></div>
+        <div><div class="small muted">Average</div><div class="num">${formatINR(a.avg)}</div></div>
+      </div>
+      <div class="section mt"><h2>By category</h2></div>
+      <div class="card">${Object.entries(a.byCategory).sort((x, y) => y[1] - x[1]).map(([c, v]) => barRow(`<span class="row" style="gap:6px">${icon(categoryIcon(c))} ${esc(catLabel(c))}</span>`, v, catMax)).join('') || `<p class="muted">${esc(t('emptyExpenses'))}</p>`}</div>
+      <div class="section mt"><h2>By month</h2></div>
+      <div class="card">${Object.entries(a.byMonth).sort().map(([m, v]) => barRow(esc(monthName(m)), v, monMax)).join('') || '<p class="muted">—</p>'}</div>
+      <div class="section mt"><h2>By person</h2></div>
+      <div class="card">${a.byPerson.map((p) => barRow(`<span class="row" style="gap:6px">${avatarOf(p.id)} ${esc(p.name)}</span>`, p.paid, perMax, ` · share ${formatINR(p.share)}`)).join('')}</div>
+      ${a.largest ? `<div class="notice">${icon('info')}<div>Largest expense: <strong>${esc(a.largest.desc)}</strong> — ${formatINR(a.largest.amountPaise)}.</div></div>` : ''}
+    </div>`;
+  app.innerHTML = shell('reports', content, { title: esc(t('reports')), subtitle: esc(g.name) });
+  const rg = $('#rgsel'); if (rg) rg.onchange = (e) => { state.reportGroup = e.target.value; screens.reports(); };
+  $('#print').onclick = () => window.print();
+  $('#csv').onclick = () => {
+    const rows = [['Date', 'Description', 'Category', 'Amount (INR)', 'Paid by', 'Participants']];
+    expenses.forEach((e) => rows.push([e.date || '', e.desc || '', e.category ? catLabel(e.category) : '', (e.amountPaise / 100).toFixed(2), nameOf(e.payers[0].memberId), e.participants.map(nameOf).join('; ')]));
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    Local.download(`sbdp-${g.name.replace(/\W+/g, '-').toLowerCase()}-report.csv`, csv, 'text/csv') ? toast('CSV downloaded') : toast('Download unavailable');
+  };
+};
 screens.empty = () => {
   app.innerHTML = shell('home', `<div class="card empty"><img src="assets/brand/empty-receipt.svg" alt="">
     <p>${esc(t('emptyExpenses'))}. ${esc(t('emptyHint'))}</p><a class="btn" href="#/add">${icon('plus')} ${esc(t('addExpense'))}</a></div>`, { title: esc(t('nav_home')) });
@@ -930,7 +981,11 @@ screens.settings = () => {
   const signedIn = Auth.isSignedIn();
   app.innerHTML = shell('settings', `<div class="narrow">
     <div class="card">${profile}</div>
-    <div class="card mt16"><div class="setting"><span class="row" style="gap:10px">${icon('users')} ${esc(t('friends'))}</span><a class="link" href="#/friends">Manage ${icon('chevron')}</a></div></div>
+    <div class="card mt16">
+      <div class="setting"><span class="row" style="gap:10px">${icon('users')} ${esc(t('friends'))}</span><a class="link" href="#/friends">Manage ${icon('chevron')}</a></div>
+      <div class="setting"><span class="row" style="gap:10px">${icon('activity')} ${esc(t('reports'))}</span><a class="link" href="#/reports">View ${icon('chevron')}</a></div>
+      <div class="setting" id="installrow" hidden><span class="row" style="gap:10px">${icon('arrowDownLeft')} ${esc(t('installApp'))}</span><button class="link" id="installbtn">Install ${icon('arrowUpRight')}</button></div>
+    </div>
     <div class="card mt16"><div class="setting"><span>${esc(t('language'))}</span><a class="link" href="#/language">${esc(LANGS.find((l) => l.code === getLang()).native)} ${icon('chevron')}</a></div>
       <div class="setting"><span>${esc(t('theme'))}</span><div class="segments" style="width:auto">${seg('light', 'light')}${seg('dark', 'dark')}${seg('system', 'system')}</div></div>
       <div class="setting"><span>${esc(t('notifications'))}</span><input type="checkbox" checked style="width:auto;height:auto"></div>
@@ -945,6 +1000,7 @@ screens.settings = () => {
   </div>`, { title: esc(t('nav_settings')) });
   $$('[data-theme-set]').forEach((a) => a.onclick = (e) => { e.preventDefault(); applyTheme(a.dataset.themeSet); screens.settings(); });
   const so = $('#signout'); if (so) so.onclick = async () => { await Auth.signOut(); go('#/login'); };
+  if (window.__sbdpInstall) { const row = $('#installrow'); if (row) { row.hidden = false; $('#installbtn').onclick = async () => { window.__sbdpInstall.prompt(); const r = await window.__sbdpInstall.userChoice; if (r && r.outcome === 'accepted') { window.__sbdpInstall = null; row.hidden = true; } }; } }
   const rf = $('#restore'); if (rf) rf.onchange = async (e) => {
     const file = e.target.files && e.target.files[0]; if (!file) return;
     try { const st = await Local.fromMarkdownFile(file); db.enableLocal(st); state.noAccount = true; toast('Session restored'); go('#/home'); }

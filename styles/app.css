@@ -14,6 +14,16 @@ input[type=date].input { background: var(--surface); }
 /* Contribution bars */
 .bar { height: 8px; border-radius: 4px; background: var(--bg); border: 1px solid var(--border); margin-top: 6px; overflow: hidden; }
 .bar i { display: block; height: 100%; border-radius: 4px; }
+/* Print / Save-as-PDF: show only the report card */
+.print-only { display: none; }
+@media print {
+  .sidebar, .bottomnav, .mobile-head, .top, #csv, #print, #rgsel, .title .btn, [data-act] { display: none !important; }
+  .app { margin: 0 !important; }
+  .content { padding: 12px !important; max-width: none !important; }
+  .print-only { display: block !important; }
+  .card { border-color: #ccc; break-inside: avoid; }
+  a[href]::after { content: ''; }
+}
 details > summary { cursor: pointer; }
 details.notice { display: block; }
 input[type=range] { accent-color: var(--accent); height: 6px; }

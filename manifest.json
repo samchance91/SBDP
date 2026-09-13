@@ -1,0 +1,15 @@
+{
+  "name": "SBDP — Split Bills, Divide Payments.",
+  "short_name": "SBDP",
+  "description": "Split bills, track who paid, and settle up. by Propelr.in",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F7F7",
+  "theme_color": "#F7F7F7",
+  "icons": [
+    { "src": "assets/brand/sbdp-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/brand/sbdp-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

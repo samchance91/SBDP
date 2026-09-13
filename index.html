@@ -8,6 +8,9 @@
   <meta name="theme-color" content="#f7f7f7">
   <link rel="icon" href="assets/brand/sbdp-icon-32.png" sizes="32x32">
   <link rel="apple-touch-icon" href="assets/brand/sbdp-icon-192.png">
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="SBDP">
   <link rel="stylesheet" href="assets/fonts.css">
   <link rel="stylesheet" href="styles/base.css">
   <link rel="stylesheet" href="styles/app.css">
@@ -32,6 +35,14 @@
 <body>
   <a href="#/home" class="skip">Skip to content</a>
   <div id="app" aria-live="polite"><noscript>SBDP requires JavaScript to run the interactive prototype.</noscript></div>
-  <script type="module" src="src/app.js?v=8"></script>
+  <script type="module" src="src/app.js?v=9"></script>
+  <script>
+    // Capture the install prompt so Settings can offer "Install app".
+    window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__sbdpInstall = e; });
+    // Register the service worker for an offline shell (https / localhost only).
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+    }
+  </script>
 </body>
 </html>
