@@ -1,14 +1,14 @@
-import { makeAdapter } from './data.js?v=6';
-import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven } from './money.js?v=6';
-import { evaluate, roundToPaise } from './calc.js?v=6';
-import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=6';
-import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=6';
-import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=6';
-import * as Share from './share.js?v=6';
-import * as Auth from './auth.js?v=6';
-import * as Local from './local.js?v=6';
-import { Cloud } from './cloud.js?v=6';
-import { CATEGORIES, CAT_LABEL, categoryIcon } from './categories.js?v=6';
+import { makeAdapter } from './data.js?v=7';
+import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven, pairwiseItems, directDebts, contributions } from './money.js?v=7';
+import { evaluate, roundToPaise } from './calc.js?v=7';
+import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=7';
+import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=7';
+import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=7';
+import * as Share from './share.js?v=7';
+import * as Auth from './auth.js?v=7';
+import * as Local from './local.js?v=7';
+import { Cloud } from './cloud.js?v=7';
+import { CATEGORIES, CAT_LABEL, categoryIcon } from './categories.js?v=7';
 
 const db = makeAdapter();
 // No-account persistence: writes autosave to this device.
@@ -29,6 +29,10 @@ function reviewBadge() {
 }
 
 function go(hash) { location.hash = hash; }
+
+// Per-group UI preferences (e.g. debt simplification), kept on this device.
+function groupPref(gid) { try { return JSON.parse(localStorage.getItem('sbdp-gpref-' + gid)) || {}; } catch { return {}; } }
+function setGroupPref(gid, patch) { const p = { ...groupPref(gid), ...patch }; try { localStorage.setItem('sbdp-gpref-' + gid, JSON.stringify(p)); } catch {} return p; }
 
 // ---- shell -----------------------------------------------------------------
 const NAV = [
@@ -288,15 +292,23 @@ screens.group = (id, params) => {
   if (tab === 'expenses') {
     body = `<div class="card">${db.expenses(g.id).slice().reverse().map(expenseRow).join('') || `<p class="muted">${esc(t('emptyExpenses'))}</p>`}</div>`;
   } else if (tab === 'balances') {
-    const tx = settle(bal, db.confirmedPayments(g.id));
+    const confirmed = db.confirmedPayments(g.id).map((p) => ({ from: p.from, to: p.to, paise: p.paise }));
+    const simplify = groupPref(g.id).simplify !== false; // default on
+    const tx = simplify ? settle(bal, confirmed) : directDebts(members, db.expenses(g.id), confirmed);
+    const myId = db.myMemberId(g.id);
     body = `<div class="card">${members.map((m) => {
       const b = bal[m.id];
       const label = b === 0 ? t('settledUp') : (b < 0 ? t('owes') : t('isOwed'));
-      return `<div class="expense"><span>${avatar(m)}</span><span class="desc"><strong>${esc(m.name)}</strong><p>${esc(label)}</p></span>
-        <span class="right num" style="color:${b < 0 ? 'var(--error)' : (b > 0 ? 'var(--good)' : 'var(--muted)')}">${formatINR(b, { sign: b !== 0 })}</span></div>`;
+      const canOpen = m.id !== myId;
+      return `<div class="expense" ${canOpen ? `data-bd="${m.id}" style="cursor:pointer"` : ''}><span>${avatar(m)}</span>
+        <span class="desc"><strong>${esc(m.name)}</strong><p>${esc(label)}${canOpen ? ' · tap for details' : ''}</p></span>
+        <span class="right num" style="color:${b < 0 ? 'var(--error)' : (b > 0 ? 'var(--good)' : 'var(--muted)')}">${formatINR(b, { sign: b !== 0 })}</span></div>
+        <div id="bd_${m.id}" hidden></div>`;
     }).join('')}</div>
-    <div class="section mt"><h2>Suggested settlement</h2></div>
-    <div class="card">${tx.map((x) => `<div class="transfer">${avatarOf(x.from)}<span class="who"><strong style="font-size:15px">${esc(nameOf(x.from))}</strong> → <strong style="font-size:15px">${esc(nameOf(x.to))}</strong></span><span class="num">${formatINR(x.paise)}</span></div>`).join('')}
+    <div class="section mt"><h2>${simplify ? 'Suggested settlement' : 'Direct balances'}</h2>
+      <label class="row small muted" style="gap:6px;cursor:pointer"><input type="checkbox" id="simp" ${simplify ? 'checked' : ''} style="width:auto;height:auto"> Simplify debts</label></div>
+    <div class="card">${tx.length ? tx.map((x) => `<div class="transfer">${avatarOf(x.from)}<span class="who"><strong style="font-size:15px">${esc(nameOf(x.from))}</strong> → <strong style="font-size:15px">${esc(nameOf(x.to))}</strong></span><span class="num">${formatINR(x.paise)}</span></div>`).join('') : `<p class="muted">${esc(t('settledUp'))} 🎉</p>`}
+      <div class="fine mt8">${simplify ? 'Fewest transfers to clear all balances.' : 'Exactly who owes whom, expense by expense.'}</div>
       <a class="btn wide mt16" href="#/settle">${esc(t('settleUp'))}</a></div>`;
   } else {
     body = activityList(db.activity());
@@ -306,6 +318,17 @@ screens.group = (id, params) => {
   app.innerHTML = shell('groups', `${header}${tabs}${body}`, { title: esc(g.name), subtitle: `${esc(t('netSpending'))} ${formatINR(spend)}`, action });
   const ib = $('#invitebtn'); if (ib) ib.onclick = () => openInvite(g.id);
   const dg = $('#delgroup'); if (dg) dg.onclick = () => confirmDialog(`Delete “${g.name}”?`, 'This removes the group and all its expenses. This cannot be undone.', async () => { await db.deleteGroup(g.id); state.group = null; toast('Group deleted'); go('#/groups'); });
+  const simp = $('#simp'); if (simp) simp.onchange = () => { setGroupPref(g.id, { simplify: simp.checked }); screens.group(g.id, new URLSearchParams('tab=balances')); };
+  const myId = db.myMemberId(g.id);
+  $$('[data-bd]').forEach((row) => row.onclick = () => {
+    const oid = row.dataset.bd; const el = $('#bd_' + oid); if (!el) return;
+    if (!el.hidden) { el.hidden = true; el.innerHTML = ''; return; }
+    const { items, net } = pairwiseItems(db.expenses(g.id), myId, oid);
+    el.innerHTML = `<div class="card" style="margin:4px 0 12px;background:var(--bg)">
+      ${items.length ? items.map((it) => `<div class="split"><span class="row">${icon(categoryIcon(it.category))} ${esc(it.desc)}</span><span class="num" style="color:${it.amount < 0 ? 'var(--error)' : 'var(--good)'}">${formatINR(it.amount, { sign: true })}</span></div>`).join('') : `<p class="muted small">No shared expenses.</p>`}
+      ${net !== 0 ? `<div class="split" style="border-top:1px solid var(--border)"><strong>${net < 0 ? 'You owe ' + esc(nameOf(oid)) : esc(nameOf(oid)) + ' owes you'}</strong><strong class="num">${formatINR(Math.abs(net))}</strong></div>` : ''}</div>`;
+    el.hidden = false;
+  });
 };
 
 // Small confirm dialog for destructive actions. Restores focus on close.
@@ -323,6 +346,37 @@ function confirmDialog(title, body, onYes) {
   ov.onclick = (e) => { if (e.target === ov) close(); };
   ov.querySelector('[data-yes]').onclick = async () => { close(); await onYes(); };
   ov.querySelector('[data-yes]').focus();
+}
+
+// Record a payment (any amount — supports partial settlement) between two members.
+function openCustomPayment(gid, onDone) {
+  state.focusReturn = document.activeElement;
+  const members = db.groupMembers(gid);
+  const myId = db.myMemberId(gid);
+  const opts = (sel) => members.map((m) => `<option value="${m.id}" ${m.id === sel ? 'selected' : ''}>${esc(m.name)}</option>`).join('');
+  const other = members.find((m) => m.id !== myId);
+  const ov = document.createElement('div');
+  ov.className = 'overlay'; ov.setAttribute('role', 'dialog');
+  ov.innerHTML = `<div class="dialog"><div class="handle"></div>
+    <div class="row between"><h2>${esc(t('recordPayment'))}</h2><button class="iconbtn" data-x aria-label="Close">${icon('x')}</button></div>
+    <div class="field"><label class="label">From (paid)</label><select id="pfrom" class="input" style="display:block">${opts(myId)}</select></div>
+    <div class="field"><label class="label">To (received)</label><select id="pto" class="input" style="display:block">${opts(other ? other.id : myId)}</select></div>
+    <div class="field"><label class="label">${esc(t('amount'))}</label><div class="amount-field"><span>₹</span><input id="pamt" inputmode="decimal" placeholder="0"></div></div>
+    <p class="fine mt8">This records a payment made elsewhere (cash, UPI…). It doesn’t move money. The recipient can confirm it.</p>
+    <button class="btn wide mt16" data-save>${esc(t('recordPayment'))}</button></div>`;
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); state.focusReturn && state.focusReturn.focus && state.focusReturn.focus(); };
+  ov.querySelector('[data-x]').onclick = close;
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  ov.querySelector('[data-save]').onclick = async () => {
+    const from = $('#pfrom', ov).value, to = $('#pto', ov).value;
+    const paise = toPaise(roundToPaise(parseFloat($('#pamt', ov).value) || 0));
+    if (from === to) { toast('Pick two different people'); return; }
+    if (paise <= 0) { toast(t('validation_amount')); return; }
+    try { await db.reportPayment(gid, from, to, paise); close(); toast('Payment recorded'); onDone && onDone(); }
+    catch (e) { toast('Could not record: ' + e.message); }
+  };
+  $('#pamt', ov).focus();
 }
 
 // Invite friends dialog: add by name/email, or copy a shareable invite link.
@@ -707,13 +761,36 @@ screens.settle = () => {
       ${(iReceive && p.status !== 'confirmed') ? `<button class="btn" data-confirm="${p.id}">${esc(t('confirmedReceived'))}</button>` : ''}</div>`;
   }).join('');
 
+  // Contribution view — paid vs fair share, and who has contributed least.
+  const contrib = contributions(members, db.expenses(g.id));
+  const least = contrib.slice().sort((a, b) => a.diff - b.diff)[0];
+  const anySpend = contrib.some((c) => c.paid > 0);
+  const contribRows = contrib.map((c) => `<div style="padding:10px 0">
+      <div class="row between"><span class="row" style="gap:8px">${avatarOf(c.id)} ${esc(nameOf(c.id))}</span>
+        <span class="small num muted">${esc(t('youPaid'))} ${formatINR(c.paid)} · ${esc(t('yourShare'))} ${formatINR(c.fair)}</span></div>
+      <div class="bar"><i style="width:${c.pct}%;background:${c.diff < 0 ? 'var(--error)' : 'var(--accent)'}"></i></div></div>`).join('');
+
+  const history = db.confirmedPayments(g.id);
+  const historyRows = history.map((p) => `<div class="expense"><span>${avatarOf(p.from)}</span>
+      <span class="desc"><strong>${esc(nameOf(p.from))} → ${esc(nameOf(p.to))}</strong><p>${esc(t('confirmedReceived'))}</p></span>
+      <span class="right num">${formatINR(p.paise)}</span></div>`).join('');
+
   app.innerHTML = shell('groups', `<div class="narrow"><a class="link back" href="#/group/${g.id}?tab=balances">${icon('arrowLeft')} ${esc(t('tab_balances'))}</a>
+    <div class="section"><h2>${esc(t('settleUp'))}</h2><button class="link" id="custompay">${icon('plus')} Record a payment</button></div>
     <div class="card">${txRows}</div>
     <details class="notice" style="cursor:pointer"><summary>How is this calculated?</summary>
       <div class="mt8">Each person’s balance is netted from what they paid vs. owed, then we match debtors to creditors with the fewest transfers.</div></details>
     ${reported.length ? `<div class="section mt"><h2>Reported payments</h2></div><div class="card">${reportedRows}</div>
       <div class="notice">${icon('info')}<div>A reported payment only updates balances once the person receiving it confirms. Opening a payment app doesn’t confirm receipt.</div></div>` : ''}
+
+    <div class="section mt"><h2>Contributions</h2></div>
+    <div class="card">${contribRows}
+      ${anySpend && least && least.diff < 0 ? `<div class="notice" style="margin-top:14px">${icon('info')}<div><strong>${esc(nameOf(least.id))}</strong> has contributed the least so far — a natural choice to pay next.</div></div>` : ''}</div>
+
+    ${history.length ? `<div class="section mt"><h2>Settlement history</h2></div><div class="card">${historyRows}</div>` : ''}
     </div>`, { title: esc(t('settleUp')) });
+
+  const cp = $('#custompay'); if (cp) cp.onclick = () => openCustomPayment(g.id, () => screens.settle());
 
   $$('[data-pay]').forEach((b) => b.onclick = async () => {
     const [from, to, paise] = b.dataset.pay.split('|');

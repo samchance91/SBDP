@@ -151,3 +151,48 @@ export function settle(balances, confirmed = []) {
   }
   return tx;
 }
+
+// Per-expense breakdown of what `meId` and `otherId` owe each other.
+// amount > 0  => other owes me (from that expense); < 0 => I owe other.
+export function pairwiseItems(expenses, meId, otherId) {
+  const items = [];
+  expenses.forEach((e) => {
+    const { shares } = computeShares(e);
+    const payTotal = (e.payers || []).reduce((s, p) => s + paise(p.paise), 0) || e.amountPaise;
+    if (payTotal <= 0) return;
+    const myPay = (e.payers || []).filter((p) => p.memberId === meId).reduce((s, p) => s + paise(p.paise), 0);
+    const otherPay = (e.payers || []).filter((p) => p.memberId === otherId).reduce((s, p) => s + paise(p.paise), 0);
+    const myShare = shares[meId] || 0;
+    const otherShare = shares[otherId] || 0;
+    // other owes me their share of what I paid; I owe other my share of what they paid.
+    const amt = Math.round(otherShare * (myPay / payTotal)) - Math.round(myShare * (otherPay / payTotal));
+    if (amt !== 0) items.push({ id: e.id, desc: e.desc, category: e.category || null, amount: amt });
+  });
+  return { items, net: items.reduce((s, i) => s + i.amount, 0) };
+}
+
+// Direct (un-simplified) debts: net per member pair. Returns [{from,to,paise}]
+// with from=debtor. `confirmed` payments are netted out.
+export function directDebts(members, expenses, confirmed = []) {
+  const out = [];
+  for (let i = 0; i < members.length; i++) {
+    for (let j = i + 1; j < members.length; j++) {
+      const a = members[i].id, b = members[j].id;
+      let net = pairwiseItems(expenses, a, b).net; // >0 => b owes a
+      confirmed.forEach((p) => { if (p.from === b && p.to === a) net -= p.paise; if (p.from === a && p.to === b) net += p.paise; });
+      if (net > 0) out.push({ from: b, to: a, paise: net });
+      else if (net < 0) out.push({ from: a, to: b, paise: -net });
+    }
+  }
+  return out.sort((x, y) => y.paise - x.paise);
+}
+
+// Contribution view: what each member paid vs their fair share (what they owe).
+// diff = paid - fair (negative = has paid less than their share so far).
+export function contributions(members, expenses) {
+  const { paid, owed } = computeBalances(members, expenses);
+  const rows = members.map((m) => ({ id: m.id, paid: paid[m.id] || 0, fair: owed[m.id] || 0, diff: (paid[m.id] || 0) - (owed[m.id] || 0) }));
+  const maxPaid = Math.max(1, ...rows.map((r) => r.paid));
+  rows.forEach((r) => (r.pct = Math.round((r.paid / maxPaid) * 100)));
+  return rows;
+}
