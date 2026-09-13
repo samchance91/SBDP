@@ -3,7 +3,7 @@
 // snapshot into the in-memory store shape the screens already understand.
 // Every group's data is shared across all its members, on every device.
 
-import { computeShares } from './money.js?v=7';
+import { computeShares } from './money.js?v=8';
 
 const initialsOf = (name) => (String(name || '?').trim().split(/\s+/).map((s) => s[0]).join('').slice(0, 2) || '?').toUpperCase();
 
@@ -28,10 +28,10 @@ export class Cloud {
         memberIds.push(m.id);
         if (!seen.has(m.id)) {
           seen.add(m.id);
-          members.push({ id: m.id, name: m.display_name, initials: initialsOf(m.display_name), you: !!m.is_me, status: m.status });
+          members.push({ id: m.id, name: m.display_name, initials: initialsOf(m.display_name), you: !!m.is_me, status: m.status, role: m.role || 'member' });
         }
       });
-      groups.push({ id: g.id, name: g.name, type: g.type, description: g.description, memberIds, archived: false });
+      groups.push({ id: g.id, name: g.name, type: g.type, description: g.description, memberIds, archived: false, createdBy: g.created_by });
       (g.expenses || []).forEach((e) => {
         const split = Object.assign({ mode: e.split_mode }, e.split_config || {});
         expenses.push({
@@ -47,8 +47,17 @@ export class Cloud {
         (p.status === 'confirmed' ? confirmedPayments : proposedPayments).push(rec);
       });
     });
-    return { currentUserId: null, members, groups, expenses, proposedPayments, confirmedPayments, activity: [] };
+    const friends = (snap.friends || []).map((f) => ({ email: f.email, name: f.name || f.email, favourite: !!f.favourite, registered: !!f.registered }));
+    return { currentUserId: null, members, groups, expenses, proposedPayments, confirmedPayments, activity: [], friends };
   }
+
+  async updateGroup(gid, { name, type, description }) { await this._rpc('update_group', { p_group: gid, p_name: name, p_type: type ?? null, p_description: description ?? null }); return { ok: true }; }
+  async setMemberRole(memberId, role) { await this._rpc('set_member_role', { p_member: memberId, p_role: role }); return { ok: true }; }
+  async removeMember(memberId) { await this._rpc('remove_member', { p_member: memberId }); return { ok: true }; }
+  async leaveGroup(gid) { await this._rpc('leave_group', { p_group: gid }); return { ok: true }; }
+  async addFriend(email, name) { await this._rpc('add_friend', { p_email: email, p_name: name ?? null }); return { ok: true }; }
+  async toggleFavouriteFriend(email) { await this._rpc('toggle_favourite_friend', { p_email: email }); return { ok: true }; }
+  async removeFriend(email) { await this._rpc('remove_friend', { p_email: email }); return { ok: true }; }
 
   async createGroup({ name, memberNames = [], type = null, description = null }) {
     const r = await this._rpc('create_group', { p_name: name, p_type: type, p_description: description });

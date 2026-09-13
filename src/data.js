@@ -12,8 +12,8 @@ export function personalEmpty(name = 'You') {
   const initials = (String(name || 'You').trim().split(/\s+/).map((s) => s[0]).join('').slice(0, 2) || 'YO').toUpperCase();
   return {
     currentUserId: 'me',
-    members: [{ id: 'me', name: name || 'You', initials, you: true, status: 'joined' }],
-    groups: [], expenses: [], proposedPayments: [], confirmedPayments: [], activity: [],
+    members: [{ id: 'me', name: name || 'You', initials, you: true, status: 'joined', role: 'owner' }],
+    groups: [], expenses: [], proposedPayments: [], confirmedPayments: [], activity: [], friends: [],
   };
 }
 
@@ -97,6 +97,45 @@ class PreviewAdapter {
   proposedPayments(gid) { return this.state.proposedPayments.filter((p) => p.groupId === gid); }
   confirmedPayments(gid) { return this.state.confirmedPayments.filter((p) => p.groupId === gid); }
   activity() { return [...this.state.activity].sort((a, b) => b.ts.localeCompare(a.ts)); }
+  friends() { return this.state.friends || []; }
+  myRole(gid) { const m = this.groupMembers(gid).find((x) => x.you); return m ? (m.role || 'member') : 'member'; }
+
+  async updateGroup(gid, patch) {
+    if (this.cloud) { const r = await this.cloud.updateGroup(gid, patch); await this.hydrate(); return r; }
+    const g = this.group(gid); if (g) { if (patch.name) g.name = patch.name; g.type = patch.type; g.description = patch.description; }
+    this._persist(); return { ok: true };
+  }
+  async setMemberRole(memberId, role) {
+    if (this.cloud) { const r = await this.cloud.setMemberRole(memberId, role); await this.hydrate(); return r; }
+    const m = this.member(memberId); if (m) m.role = role; this._persist(); return { ok: true };
+  }
+  async removeMember(memberId) {
+    if (this.cloud) { const r = await this.cloud.removeMember(memberId); await this.hydrate(); return r; }
+    this.state.groups.forEach((g) => { g.memberIds = g.memberIds.filter((id) => id !== memberId); });
+    this.state.members = this.state.members.filter((m) => m.id !== memberId || m.id === 'me');
+    this._persist(); return { ok: true };
+  }
+  async leaveGroup(gid) {
+    if (this.cloud) { const r = await this.cloud.leaveGroup(gid); await this.hydrate(); return r; }
+    const g = this.group(gid); if (g) g.memberIds = g.memberIds.filter((id) => id !== this.state.currentUserId);
+    this.state.groups = this.state.groups.filter((x) => x.id !== gid);
+    this._persist(); return { ok: true };
+  }
+  async addFriend(email, name) {
+    if (this.cloud) { const r = await this.cloud.addFriend(email, name); await this.hydrate(); return r; }
+    const e = String(email || '').trim().toLowerCase(); if (!e) return { ok: false };
+    const f = this.state.friends.find((x) => x.email === e);
+    if (f) { if (name) f.name = name; } else this.state.friends.push({ email: e, name: name || e, favourite: false, registered: false });
+    this._persist(); return { ok: true };
+  }
+  async toggleFavouriteFriend(email) {
+    if (this.cloud) { const r = await this.cloud.toggleFavouriteFriend(email); await this.hydrate(); return r; }
+    const f = this.state.friends.find((x) => x.email === email); if (f) f.favourite = !f.favourite; this._persist(); return { ok: true };
+  }
+  async removeFriend(email) {
+    if (this.cloud) { const r = await this.cloud.removeFriend(email); await this.hydrate(); return r; }
+    this.state.friends = this.state.friends.filter((x) => x.email !== email); this._persist(); return { ok: true };
+  }
 
   async createGroup({ name, memberNames = [], type, description }) {
     if (this.cloud) { const r = await this.cloud.createGroup({ name, memberNames, type, description }); await this.hydrate(); return r; }
@@ -104,7 +143,7 @@ class PreviewAdapter {
     const memberIds = [this.state.currentUserId];
     memberNames.forEach((n) => {
       const id = 'u_' + (++this._seq);
-      this.state.members.push({ id, name: n, initials: n.slice(0, 2).toUpperCase(), status: 'invited' });
+      this.state.members.push({ id, name: n, initials: n.slice(0, 2).toUpperCase(), status: 'invited', role: 'member' });
       memberIds.push(id);
     });
     this.state.groups.push({ id: gid, name, memberIds, archived: false, type, description });
@@ -125,7 +164,7 @@ class PreviewAdapter {
       if (!name) return;
       const id = 'u_' + (++this._seq);
       const initials = name.replace(/[^A-Za-z ]/g, '').split(/\s+/).map((s) => s[0]).join('').slice(0, 2).toUpperCase() || name.slice(0, 2).toUpperCase();
-      this.state.members.push({ id, name, initials, email: e.email || null, status: 'invited' });
+      this.state.members.push({ id, name, initials, email: e.email || null, status: 'invited', role: 'member' });
       g.memberIds.push(id);
       added.push(id);
     });

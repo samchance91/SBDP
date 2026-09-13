@@ -1,14 +1,14 @@
-import { makeAdapter } from './data.js?v=7';
-import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven, pairwiseItems, directDebts, contributions } from './money.js?v=7';
-import { evaluate, roundToPaise } from './calc.js?v=7';
-import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=7';
-import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=7';
-import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=7';
-import * as Share from './share.js?v=7';
-import * as Auth from './auth.js?v=7';
-import * as Local from './local.js?v=7';
-import { Cloud } from './cloud.js?v=7';
-import { CATEGORIES, CAT_LABEL, categoryIcon } from './categories.js?v=7';
+import { makeAdapter } from './data.js?v=8';
+import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven, pairwiseItems, directDebts, contributions } from './money.js?v=8';
+import { evaluate, roundToPaise } from './calc.js?v=8';
+import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=8';
+import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=8';
+import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=8';
+import * as Share from './share.js?v=8';
+import * as Auth from './auth.js?v=8';
+import * as Local from './local.js?v=8';
+import { Cloud } from './cloud.js?v=8';
+import { CATEGORIES, CAT_LABEL, categoryIcon } from './categories.js?v=8';
 
 const db = makeAdapter();
 // No-account persistence: writes autosave to this device.
@@ -273,10 +273,14 @@ screens.group = (id, params) => {
   const header = `<div class="row" style="gap:14px;margin-bottom:8px">
     <div class="avatars">${members.map((m) => avatar(m)).join('')}</div>
     <div class="small muted">${members.length} ${esc(t('members'))}${invitedCount ? ` · ${invitedCount} ${esc(t('invited'))}` : ''}</div>
-    <div class="row" style="margin-left:auto;gap:14px">
+    <div class="row" style="margin-left:auto;gap:14px;flex-wrap:wrap">
       <button class="link" id="invitebtn" style="background:none;border:0;padding:0">${icon('plus')} ${esc(t('inviteFriends'))}</button>
+      <button class="link" id="membersbtn" style="background:none;border:0;padding:0">${icon('users')} ${esc(t('manageMembers'))}</button>
       <a class="link" href="#/share">${icon('share')} ${esc(t('share'))}</a>
-      <button class="link" id="delgroup" style="background:none;border:0;padding:0;color:var(--error)">${icon('trash')} ${esc(t('deleteGroup'))}</button></div></div>
+      ${(db.myRole(g.id) === 'owner' || db.myRole(g.id) === 'admin') ? `<button class="link" id="editgroup" style="background:none;border:0;padding:0">${icon('edit')} ${esc(t('editGroup'))}</button>` : ''}
+      ${db.myRole(g.id) === 'owner'
+        ? `<button class="link" id="delgroup" style="background:none;border:0;padding:0;color:var(--error)">${icon('trash')} ${esc(t('deleteGroup'))}</button>`
+        : `<button class="link" id="leavegroup" style="background:none;border:0;padding:0;color:var(--error)">${icon('logout')} ${esc(t('leaveGroup'))}</button>`}</div></div>
     <div class="card stats">
       <div><div class="small muted">${esc(t('groupSpending'))}</div><div class="num">${formatINR(spend)}</div></div>
       <div><div class="small muted">${esc(t('yourShare'))}</div><div class="num">${formatINR(owed[db.myMemberId(g.id)] || 0)}</div></div>
@@ -317,7 +321,10 @@ screens.group = (id, params) => {
   const action = `<a class="btn" href="#/add">${icon('plus')} ${esc(t('addExpense'))}</a>`;
   app.innerHTML = shell('groups', `${header}${tabs}${body}`, { title: esc(g.name), subtitle: `${esc(t('netSpending'))} ${formatINR(spend)}`, action });
   const ib = $('#invitebtn'); if (ib) ib.onclick = () => openInvite(g.id);
+  const mb = $('#membersbtn'); if (mb) mb.onclick = () => openMembers(g.id);
+  const eg = $('#editgroup'); if (eg) eg.onclick = () => openEditGroup(g.id);
   const dg = $('#delgroup'); if (dg) dg.onclick = () => confirmDialog(`Delete “${g.name}”?`, 'This removes the group and all its expenses. This cannot be undone.', async () => { await db.deleteGroup(g.id); state.group = null; toast('Group deleted'); go('#/groups'); });
+  const lg = $('#leavegroup'); if (lg) lg.onclick = () => confirmDialog(`Leave “${g.name}”?`, 'You will be removed from this group.', async () => { try { await db.leaveGroup(g.id); state.group = null; toast('Left group'); go('#/groups'); } catch (e) { toast('Could not leave: ' + e.message); } });
   const simp = $('#simp'); if (simp) simp.onchange = () => { setGroupPref(g.id, { simplify: simp.checked }); screens.group(g.id, new URLSearchParams('tab=balances')); };
   const myId = db.myMemberId(g.id);
   $$('[data-bd]').forEach((row) => row.onclick = () => {
@@ -346,6 +353,96 @@ function confirmDialog(title, body, onYes) {
   ov.onclick = (e) => { if (e.target === ov) close(); };
   ov.querySelector('[data-yes]').onclick = async () => { close(); await onYes(); };
   ov.querySelector('[data-yes]').focus();
+}
+
+// Friends list — add by email, favourite, remove.
+const ROLES = ['owner', 'admin', 'member', 'viewer'];
+const roleIcon = (r) => (r === 'owner' ? 'crown' : r === 'admin' ? 'shield' : r === 'viewer' ? 'info' : 'users');
+
+screens.friends = () => {
+  const friends = db.friends();
+  const initials = (n) => (String(n || '?').trim().split(/\s+/).map((s) => s[0]).join('').slice(0, 2) || '?').toUpperCase();
+  const rows = friends.length ? friends.map((f) => `<div class="expense">
+      <span class="avatar">${esc(initials(f.name))}</span>
+      <span class="desc"><strong>${esc(f.name)}</strong><p>${esc(f.email)}${f.registered ? ' · on SBDP' : ''}</p></span>
+      <button class="iconbtn" data-fav="${esc(f.email)}" aria-label="${esc(t('favourite'))}" style="${f.favourite ? 'color:var(--accent);border-color:var(--accent)' : ''}">${icon('star')}</button>
+      <button class="iconbtn" data-rmf="${esc(f.email)}" aria-label="${esc(t('remove'))}">${icon('trash')}</button></div>`).join('')
+    : `<p class="muted">${esc(t('noFriends'))}</p>`;
+  app.innerHTML = shell('groups', `<div class="narrow">
+    <form class="card form" id="addfriend">
+      <div class="row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+        <div class="field" style="flex:1;min-width:160px;margin:0"><label class="label">Email</label><input id="femail" type="email" placeholder="friend@example.com" required></div>
+        <div class="field" style="flex:1;min-width:120px;margin:0"><label class="label">Name <span class="muted small">(optional)</span></label><input id="fname" placeholder="Name"></div>
+        <button class="btn" type="submit">${icon('userplus')} ${esc(t('addFriend'))}</button>
+      </div>
+    </form>
+    <div class="card mt16">${rows}</div>
+    <div class="notice">${icon('info')}<div>Friends are your personal contacts — quick-add them to any group. Adding an email that already has an SBDP account links to them.</div></div>
+    </div>`, { title: esc(t('friends')) });
+  $('#addfriend').onsubmit = async (e) => {
+    e.preventDefault();
+    const email = $('#femail').value.trim(); if (!email) return;
+    try { await db.addFriend(email, $('#fname').value.trim()); toast('Friend added'); screens.friends(); }
+    catch (err) { toast('Could not add: ' + err.message); }
+  };
+  $$('[data-fav]').forEach((b) => b.onclick = async () => { await db.toggleFavouriteFriend(b.dataset.fav); screens.friends(); });
+  $$('[data-rmf]').forEach((b) => b.onclick = async () => { await db.removeFriend(b.dataset.rmf); screens.friends(); });
+};
+
+// Manage members: roles + remove (owner/admin).
+function openMembers(gid) {
+  state.focusReturn = document.activeElement;
+  const members = db.groupMembers(gid);
+  const myRole = db.myRole(gid);
+  const canManage = myRole === 'owner' || myRole === 'admin';
+  const isOwner = myRole === 'owner';
+  const ov = document.createElement('div');
+  ov.className = 'overlay'; ov.setAttribute('role', 'dialog');
+  ov.innerHTML = `<div class="dialog"><div class="handle"></div>
+    <div class="row between"><h2>${esc(t('manageMembers'))}</h2><button class="iconbtn" data-x aria-label="Close">${icon('x')}</button></div>
+    <div>${members.map((m) => `<div class="expense"><span>${avatar(m)}</span>
+      <span class="desc"><strong>${esc(m.name)}${m.you ? ' (you)' : ''}</strong><p class="row" style="gap:4px">${icon(roleIcon(m.role || 'member'))} ${esc(t(m.role || 'member'))}${m.status === 'invited' ? ' · ' + esc(t('invited')) : ''}</p></span>
+      ${(isOwner && !m.you) ? `<select data-role="${m.id}" class="input" style="width:auto;height:38px">${ROLES.map((r) => `<option value="${r}" ${((m.role || 'member') === r) ? 'selected' : ''}>${esc(t(r))}</option>`).join('')}</select>` : ''}
+      ${(canManage && !m.you) ? `<button class="iconbtn" data-rm="${m.id}" aria-label="${esc(t('remove'))}">${icon('trash')}</button>` : ''}</div>`).join('')}</div>
+    <button class="btn secondary wide mt16" data-invite>${icon('plus')} ${esc(t('inviteFriends'))}</button>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); state.focusReturn && state.focusReturn.focus && state.focusReturn.focus(); };
+  ov.querySelector('[data-x]').onclick = close;
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  ov.querySelector('[data-invite]').onclick = () => { close(); openInvite(gid); };
+  $$('[data-role]', ov).forEach((s) => s.onchange = async () => {
+    try { await db.setMemberRole(s.dataset.role, s.value); toast('Role updated'); close(); openMembers(gid); }
+    catch (e) { toast('Could not update: ' + e.message); }
+  });
+  $$('[data-rm]', ov).forEach((b) => b.onclick = () => confirmDialog('Remove member?', 'They will be removed from this group.', async () => {
+    try { await db.removeMember(b.dataset.rm); toast('Member removed'); close(); screens.group(gid, new URLSearchParams()); }
+    catch (e) { toast('Could not remove: ' + e.message); }
+  }));
+}
+
+// Edit group details.
+function openEditGroup(gid) {
+  state.focusReturn = document.activeElement;
+  const g = db.group(gid);
+  const types = ['Trip', 'Family', 'Couple', 'Flatmates', 'Office', 'Event', 'Other'];
+  const ov = document.createElement('div');
+  ov.className = 'overlay'; ov.setAttribute('role', 'dialog');
+  ov.innerHTML = `<div class="dialog"><div class="handle"></div>
+    <div class="row between"><h2>${esc(t('editGroup'))}</h2><button class="iconbtn" data-x aria-label="Close">${icon('x')}</button></div>
+    <div class="field"><label class="label">Group name</label><input id="egname" value="${esc(g.name)}"></div>
+    <div class="field"><label class="label">Type</label><select id="egtype" class="input" style="display:block"><option value="">—</option>${types.map((tp) => `<option ${g.type === tp ? 'selected' : ''}>${tp}</option>`).join('')}</select></div>
+    <div class="field"><label class="label">Description</label><textarea id="egdesc" class="input" style="height:auto;padding:12px" rows="2">${esc(g.description || '')}</textarea></div>
+    <button class="btn wide mt16" data-save>Save</button></div>`;
+  document.body.appendChild(ov);
+  const close = () => { ov.remove(); state.focusReturn && state.focusReturn.focus && state.focusReturn.focus(); };
+  ov.querySelector('[data-x]').onclick = close;
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  ov.querySelector('[data-save]').onclick = async () => {
+    try { await db.updateGroup(gid, { name: $('#egname', ov).value.trim(), type: $('#egtype', ov).value || null, description: $('#egdesc', ov).value.trim() || null }); close(); toast('Group updated'); screens.group(gid, new URLSearchParams()); }
+    catch (e) { toast('Could not save: ' + e.message); }
+  };
+  $('#egname', ov).focus();
 }
 
 // Record a payment (any amount — supports partial settlement) between two members.
@@ -389,6 +486,8 @@ async function openInvite(gid) {
   ov.className = 'overlay'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-label', t('inviteFriends'));
   ov.innerHTML = `<div class="dialog"><div class="handle"></div>
     <div class="row between"><h2>${esc(t('inviteFriends'))}</h2><button class="iconbtn" data-x aria-label="Close">${icon('x')}</button></div>
+    ${db.friends().length ? `<div class="field"><label class="label">${esc(t('friends'))}</label>
+      <div class="chips">${db.friends().filter((f) => !db.groupMembers(gid).some((m) => (m.email || '') === f.email)).slice(0, 12).map((f) => `<button type="button" class="chip" data-friend="${esc(f.email)}|${esc(f.name)}">${f.favourite ? icon('star') : ''}${esc(f.name)}</button>`).join('') || `<span class="muted small">All friends are already in this group.</span>`}</div></div>` : ''}
     <div class="field"><label class="label">${esc(t('addByName'))} <span class="muted small">(one per line — email optional: Name &lt;email&gt;)</span></label>
       <textarea class="input" id="invnames" rows="3" style="height:auto;padding:12px" placeholder="Priya\nDev &lt;dev@example.com&gt;"></textarea></div>
     <button class="btn wide" data-send>${esc(t('sendInvites'))}</button>
@@ -422,6 +521,12 @@ async function openInvite(gid) {
       const r = await Share.nativeShare({ title: `Join ${gname} on SBDP`, text: inviteMsg, url: link });
       if (r === 'unsupported') { (await Share.copyText(link)) ? toast('Link copied — paste it anywhere') : toast('Copy unavailable'); }
     }
+  });
+  $$('[data-friend]', ov).forEach((b) => b.onclick = async () => {
+    const [email, name] = b.dataset.friend.split('|');
+    b.disabled = true;
+    try { await db.inviteMembers(gid, [{ name, email }]); document.removeEventListener('keydown', key); close(); toast(`${name} ${t('invited').toLowerCase()}`); screens.group(gid, new URLSearchParams()); }
+    catch (e) { b.disabled = false; toast('Could not add: ' + e.message); }
   });
   ov.querySelector('[data-send]').onclick = async () => {
     const entries = $('#invnames', ov).value.split('\n').map((s) => s.trim()).filter(Boolean).map((line) => {
@@ -825,6 +930,7 @@ screens.settings = () => {
   const signedIn = Auth.isSignedIn();
   app.innerHTML = shell('settings', `<div class="narrow">
     <div class="card">${profile}</div>
+    <div class="card mt16"><div class="setting"><span class="row" style="gap:10px">${icon('users')} ${esc(t('friends'))}</span><a class="link" href="#/friends">Manage ${icon('chevron')}</a></div></div>
     <div class="card mt16"><div class="setting"><span>${esc(t('language'))}</span><a class="link" href="#/language">${esc(LANGS.find((l) => l.code === getLang()).native)} ${icon('chevron')}</a></div>
       <div class="setting"><span>${esc(t('theme'))}</span><div class="segments" style="width:auto">${seg('light', 'light')}${seg('dark', 'dark')}${seg('system', 'system')}</div></div>
       <div class="setting"><span>${esc(t('notifications'))}</span><input type="checkbox" checked style="width:auto;height:auto"></div>
