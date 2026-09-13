@@ -1,14 +1,14 @@
-import { makeAdapter } from './data.js?v=9';
-import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven, pairwiseItems, directDebts, contributions, analytics } from './money.js?v=9';
-import { evaluate, roundToPaise } from './calc.js?v=9';
-import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=9';
-import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=9';
-import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=9';
-import * as Share from './share.js?v=9';
-import * as Auth from './auth.js?v=9';
-import * as Local from './local.js?v=9';
-import { Cloud } from './cloud.js?v=9';
-import { CATEGORIES, CAT_LABEL, categoryIcon } from './categories.js?v=9';
+import { makeAdapter } from './data.js?v=10';
+import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven, pairwiseItems, directDebts, contributions, analytics } from './money.js?v=10';
+import { evaluate, roundToPaise } from './calc.js?v=10';
+import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=10';
+import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=10';
+import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=10';
+import * as Share from './share.js?v=10';
+import * as Auth from './auth.js?v=10';
+import * as Local from './local.js?v=10';
+import { Cloud } from './cloud.js?v=10';
+import { CATEGORIES, CAT_LABEL, categoryIcon } from './categories.js?v=10';
 
 const db = makeAdapter();
 // No-account persistence: writes autosave to this device.
@@ -83,17 +83,18 @@ function sidebarUser() {
 // Save-a-copy button appears in no-account/local mode (and whenever offline).
 function saveButton() {
   if (!db.localMode && Local.isOnline()) return '';
-  return `<button class="link" data-act="save" style="background:none;border:0;padding:0">${icon('arrowUpRight')} ${esc(t('saveSession'))}</button>`;
+  return `<button class="link" data-act="save" style="background:none;border:0;padding:0">${icon('arrowUpRight')} Download</button>`;
 }
 
-// A quiet banner explaining local/offline mode, with a Save action.
+// A quiet banner explaining local/offline mode, with Download + Upload actions.
 function localBar() {
   const offline = !Local.isOnline();
   if (!db.localMode && !offline) return '';
   const msg = offline ? t('offlineBody') : t('localDisclaimer');
   return `<div class="content" style="padding-bottom:0"><div class="notice" style="margin-top:20px">${icon('info')}
-    <div class="row between" style="flex:1;gap:12px"><span>${esc(offline ? t('offlineTitle') + ' — ' : '')}${esc(msg)}</span>
-    <button class="btn secondary" data-act="save" style="min-height:36px">${esc(t('saveSession'))}</button></div></div></div>`;
+    <div class="row between" style="flex:1;gap:12px;flex-wrap:wrap"><span>${esc(offline ? t('offlineTitle') + ' — ' : '')}${esc(msg)}</span>
+    <div class="row" style="gap:8px"><button class="btn secondary" data-act="save" style="min-height:36px">${icon('arrowUpRight')} Download</button>
+    <button class="btn secondary" data-act="restore" style="min-height:36px">${icon('arrowDownLeft')} Upload</button></div></div></div></div>`;
 }
 
 // ---- screens ---------------------------------------------------------------
@@ -237,27 +238,40 @@ screens.groups = () => {
 
 // New group
 screens['new-group'] = () => {
-  app.innerHTML = shell('groups', `<div class="narrow"><a class="link back" href="#/groups">${icon('arrowLeft')} ${esc(t('nav_groups'))}</a>
+  const people = [];
+  const render = () => {
+    app.innerHTML = shell('groups', `<div class="narrow"><a class="link back" href="#/groups">${icon('arrowLeft')} ${esc(t('nav_groups'))}</a>
     <form class="card form" id="ng">
-      <div class="field"><label class="label">Group name</label><input id="gname" placeholder="e.g. Weekend trip" required></div>
-      <div class="field"><label class="label">${esc(t('splitBetween'))} <span class="muted small">(names, comma separated — email not required)</span></label>
-        <input id="gpeople" placeholder="e.g. Priya, Dev, Aarav"></div>
+      <div class="field"><label class="label">Group name</label><input id="gname" value="${esc(window.__gname || '')}" placeholder="e.g. Weekend trip" required></div>
+      <div class="field"><label class="label">${esc(t('splitBetween'))} <span class="muted small">(add one at a time — email not required)</span></label>
+        <div class="row" style="gap:8px"><input id="gperson" placeholder="Type a name and press Add"><button type="button" class="btn secondary" id="addperson">${icon('plus')} Add</button></div>
+        ${people.length ? `<div class="chips" style="margin-top:12px">${people.map((n, i) => `<span class="chip">${esc(n)}<button type="button" class="iconbtn" data-rmp="${i}" aria-label="${esc(t('remove'))}" style="width:24px;height:24px;border:0">${icon('x')}</button></span>`).join('')}</div>` : ''}</div>
       <details class="field"><summary class="link">More details</summary>
-        <div class="field"><label class="label">Group type</label><input placeholder="Trip, Flat, Event…"></div>
-        <div class="field"><label class="label">Description</label><input placeholder="Optional"></div>
+        <div class="field"><label class="label">Group type</label><input id="gtype" placeholder="Trip, Flat, Event…"></div>
+        <div class="field"><label class="label">Description</label><input id="gdesc" placeholder="Optional"></div>
       </details>
-      <div class="notice">${icon('info')}<div>Members without an account show as <strong>${esc(t('invited'))}</strong> until they join. Named participants stay separate ledger entities until claimed.</div></div>
+      <div class="notice">${icon('info')}<div>Members without an account show as <strong>${esc(t('invited'))}</strong> until they join.</div></div>
       <button class="btn wide mt16" type="submit">${esc(t('createGroup'))}</button>
     </form></div>`, { title: esc(t('createGroup')) });
-  $('#ng').onsubmit = async (ev) => {
-    ev.preventDefault();
-    const name = $('#gname').value.trim();
-    if (!name) { $('#gname').focus(); return; }
-    const people = $('#gpeople').value.split(',').map((s) => s.trim()).filter(Boolean);
-    const r = await db.createGroup({ name, memberNames: people });
-    toast(`${t('savedPreview')} · ${name}`);
-    go(`#/group/${r.id}`);
+    const nameInput = $('#gname');
+    nameInput.oninput = () => { window.__gname = nameInput.value; };
+    const personInput = $('#gperson');
+    const addPerson = () => { const v = personInput.value.trim(); if (v) { people.push(v); window.__gname = nameInput.value; render(); setTimeout(() => $('#gperson')?.focus(), 0); } };
+    $('#addperson').onclick = addPerson;
+    personInput.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); addPerson(); } };
+    $$('[data-rmp]').forEach((b) => b.onclick = () => { people.splice(Number(b.dataset.rmp), 1); window.__gname = nameInput.value; render(); });
+    $('#ng').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const name = nameInput.value.trim();
+      if (!name) { nameInput.focus(); return; }
+      try {
+        const r = await db.createGroup({ name, memberNames: people, type: $('#gtype')?.value.trim() || null, description: $('#gdesc')?.value.trim() || null });
+        window.__gname = ''; toast('Group created'); go(`#/group/${r.id}`);
+      } catch (e) { toast('Could not create: ' + e.message); }
+    };
   };
+  window.__gname = '';
+  render();
 };
 
 // D. Group detail
@@ -991,8 +1005,8 @@ screens.settings = () => {
       <div class="setting"><span>${esc(t('notifications'))}</span><input type="checkbox" checked style="width:auto;height:auto"></div>
     </div>
     <div class="card mt16">
-      <div class="setting"><span>${esc(t('saveSession'))}<div class="small muted">Download a .md copy — works offline, no account needed</div></span><button class="link" data-act="save">${icon('arrowUpRight')} .md</button></div>
-      <div class="setting"><span>${esc(t('restoreSession'))}<div class="small muted">Load a previously saved .md session</div></span><label class="link" style="cursor:pointer">${icon('receipt')} Choose file<input type="file" id="restore" accept=".md,text/markdown" hidden></label></div>
+      <div class="setting"><span>Download session<div class="small muted">Save a copy — works offline, no account needed</div></span><button class="link" data-act="save">${icon('arrowUpRight')} Download</button></div>
+      <div class="setting"><span>Upload session<div class="small muted">Restore from a saved copy</div></span><button class="link" data-act="restore">${icon('arrowDownLeft')} Upload</button></div>
     </div>
     ${signedIn
       ? `<button class="btn secondary wide mt16" id="signout">${icon('logout')} ${esc(t('signOut'))}</button>`
@@ -1001,11 +1015,6 @@ screens.settings = () => {
   $$('[data-theme-set]').forEach((a) => a.onclick = (e) => { e.preventDefault(); applyTheme(a.dataset.themeSet); screens.settings(); });
   const so = $('#signout'); if (so) so.onclick = async () => { await Auth.signOut(); go('#/login'); };
   if (window.__sbdpInstall) { const row = $('#installrow'); if (row) { row.hidden = false; $('#installbtn').onclick = async () => { window.__sbdpInstall.prompt(); const r = await window.__sbdpInstall.userChoice; if (r && r.outcome === 'accepted') { window.__sbdpInstall = null; row.hidden = true; } }; } }
-  const rf = $('#restore'); if (rf) rf.onchange = async (e) => {
-    const file = e.target.files && e.target.files[0]; if (!file) return;
-    try { const st = await Local.fromMarkdownFile(file); db.enableLocal(st); state.noAccount = true; toast('Session restored'); go('#/home'); }
-    catch (err) { toast(err.message || 'Could not read that file'); }
-  };
 };
 
 screens.language = () => {
@@ -1106,10 +1115,24 @@ function saveSessionFile() {
   toast(ok ? `${t('saveSession')} ✓` : 'Save unavailable in this browser');
 }
 
+// Restore a session from a previously downloaded file (opens a file picker).
+function restoreSessionFile() {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.md,text/markdown,text/plain';
+  input.onchange = async () => {
+    const file = input.files && input.files[0]; if (!file) return;
+    try { const st = await Local.fromMarkdownFile(file); db.enableLocal(st); state.noAccount = true; toast('Session restored'); go('#/home'); router(); }
+    catch (err) { toast(err.message || 'Could not read that file'); }
+  };
+  input.click();
+}
+
 // Delegated actions that live outside a single screen's own wiring.
 document.addEventListener('click', (e) => {
   const act = e.target.closest && e.target.closest('[data-act]');
-  if (act && act.dataset.act === 'save') { e.preventDefault(); saveSessionFile(); }
+  if (!act) return;
+  if (act.dataset.act === 'save') { e.preventDefault(); saveSessionFile(); }
+  else if (act.dataset.act === 'restore') { e.preventDefault(); restoreSessionFile(); }
 });
 
 // Offline/online: keep working, offer to save. Never block on connectivity.
