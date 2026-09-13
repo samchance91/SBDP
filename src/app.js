@@ -1,13 +1,14 @@
-import { makeAdapter } from './data.js?v=5';
-import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven } from './money.js?v=5';
-import { evaluate, roundToPaise } from './calc.js?v=5';
-import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=5';
-import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=5';
-import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=5';
-import * as Share from './share.js?v=5';
-import * as Auth from './auth.js?v=5';
-import * as Local from './local.js?v=5';
-import { Cloud } from './cloud.js?v=5';
+import { makeAdapter } from './data.js?v=6';
+import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven } from './money.js?v=6';
+import { evaluate, roundToPaise } from './calc.js?v=6';
+import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=6';
+import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=6';
+import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=6';
+import * as Share from './share.js?v=6';
+import * as Auth from './auth.js?v=6';
+import * as Local from './local.js?v=6';
+import { Cloud } from './cloud.js?v=6';
+import { CATEGORIES, CAT_LABEL, categoryIcon } from './categories.js?v=6';
 
 const db = makeAdapter();
 // No-account persistence: writes autosave to this device.
@@ -206,7 +207,7 @@ function expenseRow(e) {
   const mine = shares[db.myMemberId(e.groupId || state.group)] || 0;
   const payer = e.payers[0];
   return `<a class="expense" href="#/expense/${e.id}">
-    <span class="round">${icon('receipt')}</span>
+    <span class="round" title="${e.category ? esc(catLabel(e.category)) : ''}">${icon(categoryIcon(e.category))}</span>
     <span class="desc"><strong>${esc(e.desc)}</strong><p>${esc(t('paidBy'))} ${esc(nameOf(payer.memberId))} · ${esc(e.date || '')}</p></span>
     <span class="right"><strong class="num">${formatINR(e.amountPaise)}</strong><p>${esc(t('yourShare'))} ${formatINR(mine)}</p></span></a>`;
 }
@@ -390,12 +391,14 @@ function activityList(items) {
 }
 
 // E. Add expense (with split modes + calculator)
-const draft = { groupId: null, amountPaise: 0, desc: '', payers: [{ memberId: 'me', paise: 0 }], participants: [], split: { mode: 'equal' } };
+const draft = { groupId: null, amountPaise: 0, desc: '', payers: [{ memberId: 'me', paise: 0 }], participants: [], split: { mode: 'equal' }, category: null, date: '', notes: '', tags: [] };
 function resetDraftFor(gid) {
   draft.groupId = gid; draft.amountPaise = 0; draft.desc = ''; draft.split = { mode: 'equal' };
   draft.payers = [{ memberId: db.myMemberId(gid), paise: 0 }];
   draft.participants = db.groupMembers(gid).map((m) => m.id);
+  draft.category = null; draft.date = new Date().toISOString().slice(0, 10); draft.notes = ''; draft.tags = [];
 }
+const catLabel = (id) => (t('cat_' + id) !== 'cat_' + id ? t('cat_' + id) : (CAT_LABEL[id] || id));
 screens.add = () => {
   const groups = db.groups();
   if (!groups.length) { toast('Create a group first'); go('#/new-group'); return; }
@@ -422,6 +425,11 @@ function renderAdd(d) {
       <div class="amount-field"><span>₹</span><input id="amt" inputmode="decimal" placeholder="0" value="${d.amountPaise ? (d.amountPaise / 100) : ''}" aria-label="${esc(t('amount'))}">
         <button type="button" class="iconbtn" id="calcbtn" aria-label="${esc(t('calculator'))}">${icon('calc')}</button></div>
       <div class="field"><label class="label">${esc(t('description'))}</label><input id="desc" value="${esc(d.desc)}" placeholder="What was this for?"></div>
+      <div class="field"><label class="label">${esc(t('category'))}</label>
+        <div class="cats" id="cats">${CATEGORIES.map((c) => `<button type="button" class="cat ${d.category === c.id ? 'sel' : ''}" data-cat="${c.id}">${icon(c.icon)}<span>${esc(catLabel(c.id))}</span></button>`).join('')}</div></div>
+      <div class="row" style="gap:12px;align-items:flex-start">
+        <div class="field" style="flex:1;margin-top:0"><label class="label">${esc(t('date'))}</label><input type="date" id="edate" class="input" style="display:block" value="${esc(d.date)}"></div>
+      </div>
       ${groupPicker}
       <div class="field"><label class="label">${esc(t('paidBy'))}</label>
         <select id="paidby" class="input" style="display:block">${members.map((m) => `<option value="${m.id}" ${d.payers[0].memberId === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>
@@ -430,7 +438,10 @@ function renderAdd(d) {
       <div class="field">${seg}</div>
       <div id="splitcfg"></div>
       <div class="preview" id="preview"></div>
-      <div class="tools"><span class="muted small">Add a receipt or voice note after saving.</span></div>
+      <div class="field"><label class="label">${esc(t('notes'))} <span class="muted small">(optional)</span></label>
+        <textarea id="enotes" class="input" style="height:auto;padding:12px" rows="2" placeholder="Notes…">${esc(d.notes || '')}</textarea></div>
+      <div class="field"><label class="label">${esc(t('tags'))} <span class="muted small">(comma separated)</span></label>
+        <input id="etags" value="${esc((d.tags || []).join(', '))}" placeholder="e.g. reimbursable, trip"></div>
       <button class="btn wide" type="submit">${esc(t('save'))}</button>
     </form></div>`, { title: esc(t('addExpense')) });
 
@@ -441,6 +452,10 @@ function renderAdd(d) {
   $('#paidby').onchange = (e) => (d.payers = [{ memberId: e.target.value, paise: d.amountPaise }]);
   $('#calcbtn').onclick = () => openCalc((val) => { amt.value = val; updateAmount(); });
   const gs = $('#grpsel'); if (gs) gs.onchange = (e) => { state.group = e.target.value; resetDraftFor(state.group); renderAdd(draft); };
+  $('#edate').onchange = (e) => (d.date = e.target.value);
+  $('#enotes').oninput = (e) => (d.notes = e.target.value);
+  $('#etags').oninput = (e) => (d.tags = e.target.value.split(',').map((s) => s.trim()).filter(Boolean));
+  $$('[data-cat]').forEach((b) => b.onclick = () => { d.category = d.category === b.dataset.cat ? null : b.dataset.cat; $$('[data-cat]').forEach((x) => x.classList.toggle('sel', x.dataset.cat === d.category)); });
 
   $$('#modes a').forEach((a) => a.onclick = (ev) => { ev.preventDefault(); d.split = { mode: a.dataset.mode }; renderAdd(d); });
   $$('[data-part]').forEach((b) => b.onclick = () => {
@@ -496,7 +511,9 @@ function renderAdd(d) {
     if (!d.participants.length) { toast('Pick at least one person'); return; }
     d.payers = [{ memberId: $('#paidby').value, paise: d.amountPaise }];
     const clientId = 'c_' + Date.now();
-    await db.saveExpense({ groupId: state.group, desc: d.desc, amountPaise: d.amountPaise, payers: d.payers, participants: d.participants, split: d.split, date: new Date().toISOString().slice(0, 10) }, clientId);
+    try {
+      await db.saveExpense({ groupId: state.group, desc: d.desc, amountPaise: d.amountPaise, payers: d.payers, participants: d.participants, split: d.split, date: d.date || new Date().toISOString().slice(0, 10), category: d.category, notes: d.notes, tags: d.tags }, clientId);
+    } catch (e) { toast('Could not save: ' + e.message); return; }
     toast(Auth.isSignedIn() ? 'Saved' : (db.localMode ? t('saved') : t('savedPreview')));
     draft.groupId = null; // force a fresh draft next time
     go(`#/group/${state.group}?tab=expenses`);
@@ -559,10 +576,16 @@ screens.expense = (id) => {
   const partRows = e.participants.map((pid) => `<div class="split"><span class="row">${avatarOf(pid)} ${esc(nameOf(pid))}</span><span class="num">${formatINR(shares[pid] || 0)}</span></div>`).join('');
 
   app.innerHTML = shell('home', `<div class="narrow"><a class="link back" href="#/group/${e.groupId || state.group}">${icon('arrowLeft')} ${esc(db.group(e.groupId || state.group)?.name || '')}</a>
-    <div class="hero"><div class="small muted">${esc(e.desc)}</div><div class="amount num">${formatINR(e.amountPaise)}</div>
-      <div class="small muted">${esc(t('paidBy'))} ${esc(nameOf(e.payers[0].memberId))} · ${esc(e.date || '')}</div></div>
+    <div class="hero">
+      ${e.category ? `<div class="row" style="justify-content:center;gap:6px;margin-bottom:6px"><span class="pill">${icon(categoryIcon(e.category))} ${esc(catLabel(e.category))}</span></div>` : ''}
+      <div class="small muted">${esc(e.desc)}</div><div class="amount num">${formatINR(e.amountPaise)}</div>
+      <div class="small muted">${esc(t('paidBy'))} ${esc(nameOf(e.payers[0].memberId))} · ${esc(e.date || '')}${e.time ? ' · ' + esc(String(e.time).slice(0, 5)) : ''}</div></div>
     <div class="card"><div class="small muted" style="margin-bottom:6px">Payer contributions</div>${contrib}
       <div class="rule"></div><div class="small muted" style="margin-bottom:6px">Participant shares</div>${partRows}</div>
+    ${(e.notes || (e.tags && e.tags.length)) ? `<div class="card mt16">
+      ${e.notes ? `<div class="row" style="gap:10px;align-items:flex-start">${icon('note')}<div>${esc(e.notes)}</div></div>` : ''}
+      ${(e.tags && e.tags.length) ? `<div class="chips" style="margin-top:${e.notes ? '12px' : '0'}">${e.tags.map((tg) => `<span class="pill">${icon('tag')} ${esc(tg)}</span>`).join('')}</div>` : ''}
+    </div>` : ''}
 
     <div class="section mt"><h2>${esc(t('voiceNote'))}</h2></div>
     <div class="card" id="voice"></div>

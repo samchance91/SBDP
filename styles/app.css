@@ -4,6 +4,13 @@
 
 select.input { -webkit-appearance: none; appearance: none; background: var(--surface); }
 textarea.input { font: inherit; resize: vertical; }
+input[type=date].input { background: var(--surface); }
+/* Category picker */
+.cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.cat { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--muted); font-size: 11px; text-align: center; min-height: 64px; }
+.cat span { line-height: 1.2; }
+.cat.sel { border-color: var(--ink); color: var(--ink); background: var(--bg); }
+.cat:hover { border-color: var(--strong-border); }
 details > summary { cursor: pointer; }
 details.notice { display: block; }
 input[type=range] { accent-color: var(--accent); height: 6px; }

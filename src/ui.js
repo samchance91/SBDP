@@ -31,6 +31,26 @@ const PATHS = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/>',
   trash: '<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>',
   edit: '<path d="M4 20h4L18 10l-4-4L4 16z"/><path d="M13 5l4 4"/>',
+  tag: '<path d="M3 11V4h7l10 10-7 7L3 11z"/><circle cx="7.5" cy="7.5" r="1.3"/>',
+  calendar: '<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M4 9h16M9 3v4M15 3v4"/>',
+  note: '<path d="M5 4h11l3 3v13H5z"/><path d="M9 9h6M9 13h6M9 17h4"/>',
+  // Category icons
+  food: '<path d="M5 3v8a2 2 0 0 0 4 0V3M7 11v10M15 3c-1.5 0-2 3-2 5s.5 3 2 3 2-1 2-3-.5-5-2-5zM17 11v10"/>',
+  grocery: '<circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M3 4h2l2.5 12h10l2-8H6"/>',
+  transport: '<path d="M5 16V9l2-4h10l2 4v7M5 16h14M5 16v2M19 16v2"/><circle cx="8" cy="16" r="1.2"/><circle cx="16" cy="16" r="1.2"/>',
+  fuel: '<path d="M5 21V5a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v16M4 21h11M14 9h3l2 2v6a2 2 0 0 1-2 2"/>',
+  hotel: '<path d="M3 20V8h9a4 4 0 0 1 4 4v2h5v6M3 14h18M3 20h18"/>',
+  travel: '<path d="M2 12l20-7-4 16-5-6-5 3-1-4-5-2z"/>',
+  rent: '<path d="M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5"/>',
+  utilities: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+  entertainment: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  shopping: '<path d="M6 8h12l-1 12H7z"/><path d="M9 8a3 3 0 0 1 6 0"/>',
+  healthcare: '<path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/>',
+  education: '<path d="M3 8l9-4 9 4-9 4-9-4z"/><path d="M7 10v5c0 1 2.5 3 5 3s5-2 5-3v-5"/>',
+  subscription: '<path d="M4 12a8 8 0 0 1 14-5l2 2M20 12a8 8 0 0 1-14 5l-2-2M18 4v5h-5M6 20v-5h5"/>',
+  gift: '<rect x="4" y="9" width="16" height="11" rx="1"/><path d="M2 9h20v3H2zM12 9v11M12 9S9 3 6.5 5 12 9 12 9zM12 9s3-6 5.5-4S12 9 12 9z"/>',
+  briefcase: '<rect x="3" y="8" width="18" height="12" rx="2"/><path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18"/>',
+  misc: '<circle cx="6" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18" cy="12" r="1.5"/>',
 };
 
 export function icon(name, cls = 'i') {

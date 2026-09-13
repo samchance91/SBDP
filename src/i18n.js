@@ -54,6 +54,7 @@ const en = {
   sendInvites: 'Send invites', inviteLink: 'Invite link', joined: 'Joined',
   createAccount: 'Create account or sign in',
   delete: 'Delete', deleteGroup: 'Delete group', deleteExpense: 'Delete expense', edit: 'Edit',
+  category: 'Category', date: 'Date', notes: 'Notes', tags: 'Tags',
 };
 
 // Non-English catalogues fall back to English for any missing key (see t()).

@@ -3,7 +3,7 @@
 // snapshot into the in-memory store shape the screens already understand.
 // Every group's data is shared across all its members, on every device.
 
-import { computeShares } from './money.js?v=5';
+import { computeShares } from './money.js?v=6';
 
 const initialsOf = (name) => (String(name || '?').trim().split(/\s+/).map((s) => s[0]).join('').slice(0, 2) || '?').toUpperCase();
 
@@ -35,7 +35,8 @@ export class Cloud {
       (g.expenses || []).forEach((e) => {
         const split = Object.assign({ mode: e.split_mode }, e.split_config || {});
         expenses.push({
-          id: e.id, groupId: g.id, desc: e.description, amountPaise: e.amount_paise, date: e.spent_on,
+          id: e.id, groupId: g.id, desc: e.description, amountPaise: e.amount_paise, date: e.spent_on, time: e.spent_at || null,
+          category: e.category || null, notes: e.notes || null, tags: Array.isArray(e.tags) ? e.tags : [],
           payers: (e.payers || []).map((p) => ({ memberId: p.member_id, paise: p.paise })),
           participants: (e.participants || []).map((p) => p.member_id),
           split, rev: e.revision,
@@ -72,7 +73,8 @@ export class Cloud {
     const { mode, ...cfg } = exp.split || { mode: 'equal' };
     const payload = {
       group_id: exp.groupId, description: exp.desc || '', amount_paise: exp.amountPaise,
-      spent_on: exp.date || new Date().toISOString().slice(0, 10),
+      spent_on: exp.date || new Date().toISOString().slice(0, 10), spent_at: exp.time || null,
+      category: exp.category || null, notes: exp.notes || null, tags: exp.tags || [],
       split_mode: mode, split_config: cfg, client_id: exp.clientId || null,
       payers: (exp.payers || []).map((p) => ({ member_id: p.memberId, paise: p.paise })),
       participants: exp.participants.map((id) => ({ member_id: id, share_paise: shares[id] || 0 })),
