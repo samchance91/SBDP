@@ -1,14 +1,14 @@
-import { makeAdapter } from './data.js?v=11';
-import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven, pairwiseItems, directDebts, contributions, analytics } from './money.js?v=11';
-import { evaluate, roundToPaise } from './calc.js?v=11';
-import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=11';
-import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=11';
-import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=11';
-import * as Share from './share.js?v=11';
-import * as Auth from './auth.js?v=11';
-import * as Local from './local.js?v=11';
-import { Cloud } from './cloud.js?v=11';
-import { CATEGORIES, CAT_LABEL, categoryIcon } from './categories.js?v=11';
+import { makeAdapter } from './data.js?v=12';
+import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven, pairwiseItems, directDebts, contributions, analytics } from './money.js?v=12';
+import { evaluate, roundToPaise } from './calc.js?v=12';
+import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=12';
+import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=12';
+import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=12';
+import * as Share from './share.js?v=12';
+import * as Auth from './auth.js?v=12';
+import * as Local from './local.js?v=12';
+import { Cloud } from './cloud.js?v=12';
+import { CATEGORIES, CAT_LABEL, categoryIcon } from './categories.js?v=12';
 
 const db = makeAdapter();
 // No-account persistence: writes autosave to this device.
@@ -133,8 +133,11 @@ screens.login = () => {
       expired: ['Session expired', 'Please sign in again to continue.'],
     };
     const [h, b] = map[kind]; note.hidden = false;
-    note.innerHTML = `${icon('info')}<div><strong>${esc(h)}</strong><div>${esc(b)}</div></div>`;
+    const detail = Auth.lastAuthError && Auth.lastAuthError();
+    note.innerHTML = `${icon('info')}<div><strong>${esc(h)}</strong><div>${esc(b)}</div>${(kind === 'failed' && detail) ? `<div class="small" style="margin-top:6px;color:var(--error)">${esc(detail)}</div>` : ''}</div>`;
   };
+  // If we returned from Google with an error, show it immediately.
+  if (Auth.lastAuthError && Auth.lastAuthError()) showState('failed');
   $('#gbtn').onclick = async () => {
     if (Auth.configured()) {
       showState('redirect');
