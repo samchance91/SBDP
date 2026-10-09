@@ -1,7 +1,7 @@
 // Voice-note recorder. Real microphone capture via MediaRecorder when supported.
 // Records only after Record is pressed (permission requested then, not before).
 // Two-minute hard limit. Tracks are stopped on exit. No transcription is implied
-// or performed — this records and plays an audio note only.
+// or performed - this records and plays an audio note only.
 
 export const MAX_MS = 120000;
 

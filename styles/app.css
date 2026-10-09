@@ -2,6 +2,26 @@
 :root { --warning: #8a4b00; --strong-border: #a8a8a8; }
 [data-theme=dark] { --warning: #ff9500; --strong-border: #555; }
 
+/* Restraint overrides: no drop shadows, no glass/blur, no colored left stripe. */
+.dialog { box-shadow: none; }
+.receipt-card { box-shadow: none; border: 1px solid var(--border); }
+.overlay { backdrop-filter: none; background: rgba(22, 22, 22, 0.45); }
+.nav a.active { border-left: 0; padding-left: 14px; }
+
+/* Skeleton loading placeholders. */
+.skel { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; position: relative; overflow: hidden; }
+.skel::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--surface), transparent); opacity: .5; transform: translateX(-100%); animation: skel 1.1s infinite; }
+.skel-line { height: 14px; border-radius: 6px; }
+.skel-block { height: 72px; }
+@keyframes skel { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .skel::after { animation: none; } }
+
+/* Legal pages */
+.legal { max-width: 720px; margin: auto; }
+.legal h2 { font-size: 18px; margin: 24px 0 8px; }
+.legal p, .legal li { color: var(--muted); font-size: 14px; line-height: 1.7; }
+.legal ul { padding-left: 18px; margin: 8px 0; }
+
 select.input { -webkit-appearance: none; appearance: none; background: var(--surface); }
 textarea.input { font: inherit; resize: vertical; }
 input[type=date].input { background: var(--surface); }

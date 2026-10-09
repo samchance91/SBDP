@@ -3,7 +3,7 @@
 // is NEVER translated. People's names and free-text descriptions are NEVER
 // translated. Currency is always INR with Indian grouping; switching language
 // does not convert amounts. Every non-English catalogue is marked
-// `needsReview: true` — machine-assisted copy pending native-speaker review.
+// `needsReview: true` - machine-assisted copy pending native-speaker review.
 
 export const LANGS = [
   { code: 'en', label: 'English', native: 'English', script: 'latin' },
@@ -47,7 +47,7 @@ const en = {
   notJoined: 'Not joined', invited: 'Invited',
   validation_amount: 'Enter an amount greater than zero',
   useWithoutAccount: 'Use without an account',
-  localDisclaimer: 'No account — your data is saved only on this device. Export a copy so you don’t lose it.',
+  localDisclaimer: 'No account - your data is saved only on this device. Export a copy so you don’t lose it.',
   saveSession: 'Save session (.md)', restoreSession: 'Restore from file', saved: 'Saved',
   offlineTitle: 'You’re offline', offlineBody: 'SBDP keeps working. Save a copy of your session so nothing is lost.',
   invite: 'Invite', inviteFriends: 'Invite friends', addByName: 'Add by name',
@@ -279,7 +279,7 @@ export const setLang = (code) => { if (CATALOGUES[code]) current = code; };
 export const getLang = () => current;
 export const needsReview = (code = current) => !!CATALOGUES[code]?.needsReview;
 
-// t(key) — returns the string for the active language, English fallback.
+// t(key) - returns the string for the active language, English fallback.
 export function t(key, code = current) {
   const cat = CATALOGUES[code] || en;
   return (key in cat && cat[key] != null) ? cat[key] : (en[key] ?? key);

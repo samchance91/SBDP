@@ -1,4 +1,4 @@
-// SBDP money engine — all arithmetic in integer paise (1 rupee = 100 paise).
+// SBDP money engine - all arithmetic in integer paise (1 rupee = 100 paise).
 // No floating point is used for stored balances; only presentational formatting divides.
 
 export const toPaise = (rupees) => Math.round(Number(rupees) * 100);

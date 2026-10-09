@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>SBDP — Split Bills, Divide Payments</title>
-  <meta name="description" content="SBDP by Propelr.in — a minimal expense-splitting prototype.">
+  <title>SBDP - Split Bills, Divide Payments</title>
+  <meta name="description" content="SBDP by Propelr.in - a minimal expense-splitting prototype.">
   <meta name="theme-color" content="#f7f7f7">
   <link rel="icon" href="assets/brand/sbdp-icon-32.png" sizes="32x32">
   <link rel="apple-touch-icon" href="assets/brand/sbdp-icon-192.png">
@@ -17,7 +17,7 @@
   <!--
     Backend configuration (optional). To enable real Google sign-in + Supabase,
     set these before app.js loads (e.g. injected server-side). Leaving them unset
-    keeps the app in clearly-labelled preview mode. Never inline secrets here —
+    keeps the app in clearly-labelled preview mode. Never inline secrets here -
     only the public anon key belongs client-side. See sbdp/.env.example.
   -->
   <script>
@@ -36,8 +36,8 @@
   <a href="#/home" class="skip">Skip to content</a>
   <div id="app" aria-live="polite"><noscript>SBDP requires JavaScript to run the interactive prototype.</noscript></div>
   <!-- Supabase library, vendored locally so sign-in never depends on an external CDN. -->
-  <script src="assets/vendor/supabase.js?v=12"></script>
-  <script type="module" src="src/app.js?v=12"></script>
+  <script src="assets/vendor/supabase.js?v=13"></script>
+  <script type="module" src="src/app.js?v=13"></script>
   <script>
     // Capture the install prompt so Settings can offer "Install app".
     window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); window.__sbdpInstall = e; });

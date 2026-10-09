@@ -1,14 +1,14 @@
-import { makeAdapter } from './data.js?v=12';
-import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven, pairwiseItems, directDebts, contributions, analytics } from './money.js?v=12';
-import { evaluate, roundToPaise } from './calc.js?v=12';
-import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=12';
-import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=12';
-import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=12';
-import * as Share from './share.js?v=12';
-import * as Auth from './auth.js?v=12';
-import * as Local from './local.js?v=12';
-import { Cloud } from './cloud.js?v=12';
-import { CATEGORIES, CAT_LABEL, categoryIcon } from './categories.js?v=12';
+import { makeAdapter } from './data.js?v=13';
+import { computeBalances, settle, computeShares, formatINR, toPaise, splitEven, pairwiseItems, directDebts, contributions, analytics } from './money.js?v=13';
+import { evaluate, roundToPaise } from './calc.js?v=13';
+import { t, setLang, getLang, LANGS, needsReview } from './i18n.js?v=13';
+import { icon, avatar, lockup, esc, applyTheme, getThemeMode, toast } from './ui.js?v=13';
+import { Recorder, fmtTime, isSupported as audioSupported } from './audio.js?v=13';
+import * as Share from './share.js?v=13';
+import * as Auth from './auth.js?v=13';
+import * as Local from './local.js?v=13';
+import { Cloud } from './cloud.js?v=13';
+import { CATEGORIES, CAT_LABEL, categoryIcon } from './categories.js?v=13';
 
 const db = makeAdapter();
 // No-account persistence: writes autosave to this device.
@@ -20,12 +20,12 @@ const state = { group: null, calcTarget: null, recorder: null, focusReturn: null
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const money = (p, o) => `<span class="num">${formatINR(p, o)}</span>`;
-const nameOf = (id) => db.member(id)?.name || '—';
+const nameOf = (id) => db.member(id)?.name || '-';
 const avatarOf = (id, extra) => avatar(db.member(id), extra);
 
 function reviewBadge() {
   if (db.mode !== 'preview' || Auth.isSignedIn()) return '';
-  return `<span class="pill" title="No backend configured — data is local preview only">${icon('info', 'i')}&nbsp;${esc(t('reviewMode'))}</span>`;
+  return `<span class="pill" title="No backend configured - data is local preview only">${icon('info', 'i')}&nbsp;${esc(t('reviewMode'))}</span>`;
 }
 
 function go(hash) { location.hash = hash; }
@@ -92,7 +92,7 @@ function localBar() {
   if (!db.localMode && !offline) return '';
   const msg = offline ? t('offlineBody') : t('localDisclaimer');
   return `<div class="content" style="padding-bottom:0"><div class="notice" style="margin-top:20px">${icon('info')}
-    <div class="row between" style="flex:1;gap:12px;flex-wrap:wrap"><span>${esc(offline ? t('offlineTitle') + ' — ' : '')}${esc(msg)}</span>
+    <div class="row between" style="flex:1;gap:12px;flex-wrap:wrap"><span>${esc(offline ? t('offlineTitle') + ' - ' : '')}${esc(msg)}</span>
     <div class="row" style="gap:8px"><button class="btn secondary" data-act="save" style="min-height:36px">${icon('arrowUpRight')} Download</button>
     <button class="btn secondary" data-act="restore" style="min-height:36px">${icon('arrowDownLeft')} Upload</button></div></div></div></div>`;
 }
@@ -111,7 +111,7 @@ screens.login = () => {
       ${lockup(true)}
       <div class="login-copy">
         <h1>${esc(t('benefit'))}</h1>
-        <p>Split a bill, track who paid, and settle up — without the spreadsheet.</p>
+        <p>Split a bill, track who paid, and settle up - without the spreadsheet.</p>
         <button class="btn google" id="gbtn"><img src="assets/google-g.png" alt="">${esc(t('continueGoogle'))}</button>
         <button class="btn secondary wide" id="noacct" style="margin-top:12px">${esc(t('useWithoutAccount'))}</button>
         <div class="row" style="gap:16px;margin-top:20px">
@@ -119,6 +119,7 @@ screens.login = () => {
         </div>
         <div class="notice" id="authnote" hidden></div>
         <p class="fine" style="margin-top:28px">SBDP uses Google sign-in. We only request your name and email. Your account is created automatically on first sign-in. Prefer not to sign in? “${esc(t('useWithoutAccount'))}” keeps everything on this device.</p>
+        <p class="fine" style="margin-top:14px">By continuing you agree to our <a class="link" style="display:inline" href="#/terms">Terms</a> and <a class="link" style="display:inline" href="#/privacy">Privacy Policy</a>.</p>
       </div>
     </div>
     <div class="login-right">${lockup(false)}${example}</div>
@@ -147,7 +148,7 @@ screens.login = () => {
     }
     // Preview: DO NOT pretend Google auth succeeded.
     note.hidden = false;
-    note.innerHTML = `${icon('info')}<div><strong>Preview build — Google is not connected.</strong>
+    note.innerHTML = `${icon('info')}<div><strong>Preview build - Google is not connected.</strong>
       <div>Real Google sign-in activates only with configured Supabase credentials (see SETUP.md). Use “${esc(t('tryQuick'))}” to explore sample data.</div></div>`;
   };
   $('#noacct').onclick = () => {
@@ -170,7 +171,7 @@ screens.home = () => {
     app.innerHTML = shell('home', `<div class="card empty"><img src="assets/brand/empty-receipt.svg" alt="">
       <p>No groups yet. Create a group, add friends, and split your first expense.</p>
       <a class="btn" href="#/new-group">${icon('plus')} ${esc(t('createGroup'))}</a></div>`,
-      { title: esc(t('nav_home')), subtitle: `Hi ${esc(uname)} — let’s set up your first split.` });
+      { title: esc(t('nav_home')), subtitle: `Hi ${esc(uname)} - let’s set up your first split.` });
     return;
   }
   if (!state.group || !db.group(state.group)) state.group = groups[0].id;
@@ -184,7 +185,7 @@ screens.home = () => {
     const last = db.expenses(gr.id).slice(-1)[0];
     return `<a class="expense" href="#/group/${gr.id}">
       <span class="groupmark">${esc(gr.name.slice(0, 2).toUpperCase())}</span>
-      <span class="desc"><strong>${esc(gr.name)}</strong><p>${gm.length} ${esc(t('members'))} · ${last ? esc(last.desc) : '—'}</p></span>
+      <span class="desc"><strong>${esc(gr.name)}</strong><p>${gm.length} ${esc(t('members'))} · ${last ? esc(last.desc) : '-'}</p></span>
       <span class="right"><strong class="num" style="color:${b < 0 ? 'var(--error)' : 'var(--ink)'}">${formatINR(b, { sign: b !== 0 })}</strong><p>${b < 0 ? esc(t('youOwe')) : esc(t('youAreOwed'))}</p></span></a>`;
   }).join('');
 
@@ -207,7 +208,7 @@ screens.home = () => {
     </div><div>
       <div class="section"><h2>${esc(t('activeGroups'))}</h2><a class="link" href="#/new-group">${icon('plus')}</a></div>
       <div class="card">${groupRows}</div>
-    </div></div>`, { title: `${esc(t('nav_home'))}`, subtitle: `Hi ${esc(uname)} — here’s where things stand.`, action });
+    </div></div>`, { title: `${esc(t('nav_home'))}`, subtitle: `Hi ${esc(uname)} - here’s where things stand.`, action });
 };
 
 function expenseRow(e) {
@@ -246,7 +247,7 @@ screens['new-group'] = () => {
     app.innerHTML = shell('groups', `<div class="narrow"><a class="link back" href="#/groups">${icon('arrowLeft')} ${esc(t('nav_groups'))}</a>
     <form class="card form" id="ng">
       <div class="field"><label class="label">Group name</label><input id="gname" value="${esc(window.__gname || '')}" placeholder="e.g. Weekend trip" required></div>
-      <div class="field"><label class="label">${esc(t('splitBetween'))} <span class="muted small">(add one at a time — email not required)</span></label>
+      <div class="field"><label class="label">${esc(t('splitBetween'))} <span class="muted small">(add one at a time - email not required)</span></label>
         <div class="row" style="gap:8px"><input id="gperson" placeholder="Type a name and press Add"><button type="button" class="btn secondary" id="addperson">${icon('plus')} Add</button></div>
         ${people.length ? `<div class="chips" style="margin-top:12px">${people.map((n, i) => `<span class="chip">${esc(n)}<button type="button" class="iconbtn" data-rmp="${i}" aria-label="${esc(t('remove'))}" style="width:24px;height:24px;border:0">${icon('x')}</button></span>`).join('')}</div>` : ''}</div>
       <details class="field"><summary class="link">More details</summary>
@@ -328,7 +329,7 @@ screens.group = (id, params) => {
     }).join('')}</div>
     <div class="section mt"><h2>${simplify ? 'Suggested settlement' : 'Direct balances'}</h2>
       <label class="row small muted" style="gap:6px;cursor:pointer"><input type="checkbox" id="simp" ${simplify ? 'checked' : ''} style="width:auto;height:auto"> Simplify debts</label></div>
-    <div class="card">${tx.length ? tx.map((x) => `<div class="transfer">${avatarOf(x.from)}<span class="who"><strong style="font-size:15px">${esc(nameOf(x.from))}</strong> → <strong style="font-size:15px">${esc(nameOf(x.to))}</strong></span><span class="num">${formatINR(x.paise)}</span></div>`).join('') : `<p class="muted">${esc(t('settledUp'))} 🎉</p>`}
+    <div class="card">${tx.length ? tx.map((x) => `<div class="transfer">${avatarOf(x.from)}<span class="who"><strong style="font-size:15px">${esc(nameOf(x.from))}</strong> → <strong style="font-size:15px">${esc(nameOf(x.to))}</strong></span><span class="num">${formatINR(x.paise)}</span></div>`).join('') : `<p class="muted">${esc(t('settledUp'))}</p>`}
       <div class="fine mt8">${simplify ? 'Fewest transfers to clear all balances.' : 'Exactly who owes whom, expense by expense.'}</div>
       <a class="btn wide mt16" href="#/settle">${esc(t('settleUp'))}</a></div>`;
   } else {
@@ -392,7 +393,7 @@ function openPrompt(title, body, value, onOk) {
   $('#promptval', ov).focus(); $('#promptval', ov).select();
 }
 
-// Friends list — add by email, favourite, remove.
+// Friends list - add by email, favourite, remove.
 const ROLES = ['owner', 'admin', 'member', 'viewer'];
 const roleIcon = (r) => (r === 'owner' ? 'crown' : r === 'admin' ? 'shield' : r === 'viewer' ? 'info' : 'users');
 
@@ -414,7 +415,7 @@ screens.friends = () => {
       </div>
     </form>
     <div class="card mt16">${rows}</div>
-    <div class="notice">${icon('info')}<div>Friends are your personal contacts — quick-add them to any group. Adding an email that already has an SBDP account links to them.</div></div>
+    <div class="notice">${icon('info')}<div>Friends are your personal contacts - quick-add them to any group. Adding an email that already has an SBDP account links to them.</div></div>
     </div>`, { title: esc(t('friends')) });
   $('#addfriend').onsubmit = async (e) => {
     e.preventDefault();
@@ -468,7 +469,7 @@ function openEditGroup(gid) {
   ov.innerHTML = `<div class="dialog"><div class="handle"></div>
     <div class="row between"><h2>${esc(t('editGroup'))}</h2><button class="iconbtn" data-x aria-label="Close">${icon('x')}</button></div>
     <div class="field"><label class="label">Group name</label><input id="egname" value="${esc(g.name)}"></div>
-    <div class="field"><label class="label">Type</label><select id="egtype" class="input" style="display:block"><option value="">—</option>${types.map((tp) => `<option ${g.type === tp ? 'selected' : ''}>${tp}</option>`).join('')}</select></div>
+    <div class="field"><label class="label">Type</label><select id="egtype" class="input" style="display:block"><option value="">-</option>${types.map((tp) => `<option ${g.type === tp ? 'selected' : ''}>${tp}</option>`).join('')}</select></div>
     <div class="field"><label class="label">Description</label><textarea id="egdesc" class="input" style="height:auto;padding:12px" rows="2">${esc(g.description || '')}</textarea></div>
     <button class="btn wide mt16" data-save>Save</button></div>`;
   document.body.appendChild(ov);
@@ -482,7 +483,7 @@ function openEditGroup(gid) {
   $('#egname', ov).focus();
 }
 
-// Record a payment (any amount — supports partial settlement) between two members.
+// Record a payment (any amount - supports partial settlement) between two members.
 function openCustomPayment(gid, onDone) {
   state.focusReturn = document.activeElement;
   const members = db.groupMembers(gid);
@@ -525,7 +526,7 @@ async function openInvite(gid) {
     <div class="row between"><h2>${esc(t('inviteFriends'))}</h2><button class="iconbtn" data-x aria-label="Close">${icon('x')}</button></div>
     ${db.friends().length ? `<div class="field"><label class="label">${esc(t('friends'))}</label>
       <div class="chips">${db.friends().filter((f) => !db.groupMembers(gid).some((m) => (m.email || '') === f.email)).slice(0, 12).map((f) => `<button type="button" class="chip" data-friend="${esc(f.email)}|${esc(f.name)}">${f.favourite ? icon('star') : ''}${esc(f.name)}</button>`).join('') || `<span class="muted small">All friends are already in this group.</span>`}</div></div>` : ''}
-    <div class="field"><label class="label">${esc(t('addByName'))} <span class="muted small">(one per line — email optional: Name &lt;email&gt;)</span></label>
+    <div class="field"><label class="label">${esc(t('addByName'))} <span class="muted small">(one per line - email optional: Name &lt;email&gt;)</span></label>
       <textarea class="input" id="invnames" rows="3" style="height:auto;padding:12px" placeholder="Priya\nDev &lt;dev@example.com&gt;"></textarea></div>
     <button class="btn wide" data-send>${esc(t('sendInvites'))}</button>
     <div class="rule"></div>
@@ -537,7 +538,7 @@ async function openInvite(gid) {
       <button class="channel" data-share="email"><span>${icon('mail')}</span>Email</button>
       <button class="channel" data-share="more"><span>${icon('share')}</span>${esc(t('moreApps'))}</button>
     </div>
-    <p class="fine">Anyone can open this link — they can join with Google or use it without an account. Invited friends show as “${esc(t('invited'))}” until they join.</p>
+    <p class="fine">Anyone can open this link - they can join with Google or use it without an account. Invited friends show as “${esc(t('invited'))}” until they join.</p>
     <div class="rule"></div>
     <div class="small muted">${members.map((m) => `<span class="pill" style="margin:2px">${esc(m.name)} · ${esc(m.status === 'joined' ? t('joined') : t('invited'))}</span>`).join('')}</div>
     </div>`;
@@ -556,7 +557,7 @@ async function openInvite(gid) {
     else if (k === 'email') window.open(Share.emailUrl(`Join ${gname} on SBDP`, inviteMsg), '_blank');
     else {
       const r = await Share.nativeShare({ title: `Join ${gname} on SBDP`, text: inviteMsg, url: link });
-      if (r === 'unsupported') { (await Share.copyText(link)) ? toast('Link copied — paste it anywhere') : toast('Copy unavailable'); }
+      if (r === 'unsupported') { (await Share.copyText(link)) ? toast('Link copied - paste it anywhere') : toast('Copy unavailable'); }
     }
   });
   $$('[data-friend]', ov).forEach((b) => b.onclick = async () => {
@@ -717,7 +718,7 @@ function renderAdd(d) {
 }
 
 // F. Calculator (route + modal)
-screens.calc = () => { screens.home(); openCalc((val) => { toast(`Result ${val} — open Add expense to use it`); }); };
+screens.calc = () => { screens.home(); openCalc((val) => { toast(`Result ${val} - open Add expense to use it`); }); };
 function openCalc(onUse) {
   state.focusReturn = document.activeElement;
   let expr = '(850 + 650) / 2';
@@ -806,7 +807,7 @@ function mountVoice(el) {
       return;
     }
     if (rec.state === 'idle') {
-      el.innerHTML = `<div class="row between"><div class="small muted">No audio yet — up to 2:00. Mic permission is asked only when you press Record.</div>
+      el.innerHTML = `<div class="row between"><div class="small muted">No audio yet - up to 2:00. Mic permission is asked only when you press Record.</div>
         <button class="btn" id="rec">${icon('mic')} ${esc(t('record'))}</button></div>
         <details class="mt16"><summary class="link">${esc(t('typedNote'))} instead</summary><div class="field"><textarea class="input" style="height:auto;padding:12px" rows="3" placeholder="Type the note…"></textarea></div></details>`;
       $('#rec', el).onclick = async () => { const r = await rec.start(); if (!r.ok) draw(); };
@@ -848,7 +849,7 @@ screens.share = () => {
   const { bal, spend } = computeBalances(members, db.expenses(g.id));
   const tx = settle(bal);
   const stmt = Share.buildStatement({
-    title: `${g.name} — SBDP statement`,
+    title: `${g.name} - SBDP statement`,
     lines: [`Group spending: ${formatINR(spend)}`, ...members.map((m) => `${m.name}: ${formatINR(bal[m.id], { sign: bal[m.id] !== 0 })}`), '', 'Settle up:', ...tx.map((x) => `${nameOf(x.from)} → ${nameOf(x.to)}: ${formatINR(x.paise)}`)],
     footer: `Created using SBDP\n${Share.appUrl()}`,
   });
@@ -867,16 +868,16 @@ screens.share = () => {
     else if (k === 'copyLink') { const link = location.origin + location.pathname + '#/share?snap=demo'; (await Share.copyText(link)) ? toast('Link copied') : toast('Copy unavailable'); }
     else if (k === 'whatsapp') window.open(Share.whatsappUrl(stmt), '_blank');
     else if (k === 'telegram') window.open(Share.telegramUrl(stmt), '_blank');
-    else if (k === 'email') window.open(Share.emailUrl(`${g.name} — SBDP`, stmt), '_blank');
+    else if (k === 'email') window.open(Share.emailUrl(`${g.name} - SBDP`, stmt), '_blank');
     else {
-      const r = await Share.nativeShare({ title: `${g.name} — SBDP`, text: stmt });
-      if (r === 'cancelled') { /* silent — not an error */ }
-      else if (r === 'unsupported') toast('Native share unavailable — use a channel below');
+      const r = await Share.nativeShare({ title: `${g.name} - SBDP`, text: stmt });
+      if (r === 'cancelled') { /* silent - not an error */ }
+      else if (r === 'unsupported') toast('Native share unavailable - use a channel below');
     }
   });
 };
 
-// I. Settle up — record payments and confirm receipts (real).
+// I. Settle up - record payments and confirm receipts (real).
 screens.settle = () => {
   const g = db.group(state.group) || db.groups()[0];
   if (!g) { go('#/home'); return; }
@@ -893,7 +894,7 @@ screens.settle = () => {
     return `<div class="transfer">${avatarOf(x.from)}<span class="who"><strong>${esc(nameOf(x.from))}</strong> → <strong>${esc(nameOf(x.to))}</strong>${iPay ? `<p class="small muted">You pay</p>` : ''}</span>
       <span class="num">${formatINR(x.paise)}</span>
       ${iPay ? `<button class="btn secondary" data-pay="${x.from}|${x.to}|${x.paise}">${esc(t('recordPayment'))}</button>` : ''}</div>`;
-  }).join('') : `<p class="muted">${esc(t('settledUp'))} 🎉</p>`;
+  }).join('') : `<p class="muted">${esc(t('settledUp'))}</p>`;
 
   const reportedRows = reported.map((p) => {
     const iReceive = p.to === myId;
@@ -903,7 +904,7 @@ screens.settle = () => {
       ${(iReceive && p.status !== 'confirmed') ? `<button class="btn" data-confirm="${p.id}">${esc(t('confirmedReceived'))}</button>` : ''}</div>`;
   }).join('');
 
-  // Contribution view — paid vs fair share, and who has contributed least.
+  // Contribution view - paid vs fair share, and who has contributed least.
   const contrib = contributions(members, db.expenses(g.id));
   const least = contrib.slice().sort((a, b) => a.diff - b.diff)[0];
   const anySpend = contrib.some((c) => c.paid > 0);
@@ -927,7 +928,7 @@ screens.settle = () => {
 
     <div class="section mt"><h2>Contributions</h2></div>
     <div class="card">${contribRows}
-      ${anySpend && least && least.diff < 0 ? `<div class="notice" style="margin-top:14px">${icon('info')}<div><strong>${esc(nameOf(least.id))}</strong> has contributed the least so far — a natural choice to pay next.</div></div>` : ''}</div>
+      ${anySpend && least && least.diff < 0 ? `<div class="notice" style="margin-top:14px">${icon('info')}<div><strong>${esc(nameOf(least.id))}</strong> has contributed the least so far - a natural choice to pay next.</div></div>` : ''}</div>
 
     ${history.length ? `<div class="section mt"><h2>Settlement history</h2></div><div class="card">${historyRows}</div>` : ''}
     </div>`, { title: esc(t('settleUp')) });
@@ -937,7 +938,7 @@ screens.settle = () => {
   $$('[data-pay]').forEach((b) => b.onclick = async () => {
     const [from, to, paise] = b.dataset.pay.split('|');
     b.disabled = true;
-    try { await db.reportPayment(g.id, from, to, Number(paise)); toast('Payment recorded — waiting for confirmation'); screens.settle(); }
+    try { await db.reportPayment(g.id, from, to, Number(paise)); toast('Payment recorded - waiting for confirmation'); screens.settle(); }
     catch (e) { b.disabled = false; toast('Could not record: ' + e.message); }
   });
   $$('[data-confirm]').forEach((b) => b.onclick = async () => {
@@ -978,7 +979,7 @@ screens.reports = () => {
       <button class="btn secondary" id="csv">${icon('arrowUpRight')} CSV</button>
       <button class="btn secondary" id="print">${icon('receipt')} PDF</button></div></div>
     <div id="reportcard">
-      <div class="print-only" style="margin-bottom:12px"><strong>${esc(g.name)} — SBDP report</strong><div class="small muted">${esc(new Date().toLocaleDateString('en-IN'))}</div></div>
+      <div class="print-only" style="margin-bottom:12px"><strong>${esc(g.name)} - SBDP report</strong><div class="small muted">${esc(new Date().toLocaleDateString('en-IN'))}</div></div>
       <div class="card stats">
         <div><div class="small muted">Total spent</div><div class="num">${formatINR(a.total)}</div></div>
         <div><div class="small muted">Expenses</div><div class="num">${a.count}</div></div>
@@ -987,10 +988,10 @@ screens.reports = () => {
       <div class="section mt"><h2>By category</h2></div>
       <div class="card">${Object.entries(a.byCategory).sort((x, y) => y[1] - x[1]).map(([c, v]) => barRow(`<span class="row" style="gap:6px">${icon(categoryIcon(c))} ${esc(catLabel(c))}</span>`, v, catMax)).join('') || `<p class="muted">${esc(t('emptyExpenses'))}</p>`}</div>
       <div class="section mt"><h2>By month</h2></div>
-      <div class="card">${Object.entries(a.byMonth).sort().map(([m, v]) => barRow(esc(monthName(m)), v, monMax)).join('') || '<p class="muted">—</p>'}</div>
+      <div class="card">${Object.entries(a.byMonth).sort().map(([m, v]) => barRow(esc(monthName(m)), v, monMax)).join('') || '<p class="muted">-</p>'}</div>
       <div class="section mt"><h2>By person</h2></div>
       <div class="card">${a.byPerson.map((p) => barRow(`<span class="row" style="gap:6px">${avatarOf(p.id)} ${esc(p.name)}</span>`, p.paid, perMax, ` · share ${formatINR(p.share)}`)).join('')}</div>
-      ${a.largest ? `<div class="notice">${icon('info')}<div>Largest expense: <strong>${esc(a.largest.desc)}</strong> — ${formatINR(a.largest.amountPaise)}.</div></div>` : ''}
+      ${a.largest ? `<div class="notice">${icon('info')}<div>Largest expense: <strong>${esc(a.largest.desc)}</strong> - ${formatINR(a.largest.amountPaise)}.</div></div>` : ''}
     </div>`;
   app.innerHTML = shell('reports', content, { title: esc(t('reports')), subtitle: esc(g.name) });
   const rg = $('#rgsel'); if (rg) rg.onchange = (e) => { state.reportGroup = e.target.value; screens.reports(); };
@@ -1030,8 +1031,12 @@ screens.settings = () => {
       <div class="setting"><span>${esc(t('notifications'))}</span><input type="checkbox" checked style="width:auto;height:auto"></div>
     </div>
     <div class="card mt16">
-      <div class="setting"><span>Download session<div class="small muted">Save a copy — works offline, no account needed</div></span><button class="link" data-act="save">${icon('arrowUpRight')} Download</button></div>
+      <div class="setting"><span>Download session<div class="small muted">Save a copy - works offline, no account needed</div></span><button class="link" data-act="save">${icon('arrowUpRight')} Download</button></div>
       <div class="setting"><span>Upload session<div class="small muted">Restore from a saved copy</div></span><button class="link" data-act="restore">${icon('arrowDownLeft')} Upload</button></div>
+    </div>
+    <div class="card mt16">
+      <div class="setting"><span>Terms of Service</span><a class="link" href="#/terms">View ${icon('chevron')}</a></div>
+      <div class="setting"><span>Privacy Policy</span><a class="link" href="#/privacy">View ${icon('chevron')}</a></div>
     </div>
     ${signedIn
       ? `<button class="btn secondary wide mt16" id="signout">${icon('logout')} ${esc(t('signOut'))}</button>`
@@ -1058,6 +1063,51 @@ screens.language = () => {
     </div>`, { title: esc(t('language')) });
   $$('[data-lang]').forEach((b) => b.onclick = () => { setLang(b.dataset.lang); document.documentElement.lang = b.dataset.lang; screens.language(); });
 };
+
+// Legal pages.
+const LEGAL_UPDATED = '9 October 2026';
+function legalShell(title, inner) {
+  const back = Auth.isSignedIn() || db.localMode ? `<a class="link back" href="#/settings">${icon('arrowLeft')} ${esc(t('nav_settings'))}</a>` : `<a class="link back" href="#/login">${icon('arrowLeft')} Back</a>`;
+  app.innerHTML = `<main class="app"><div class="content"><div class="legal">${back}
+    <h1>${esc(title)}</h1><p class="small" style="margin-top:8px">Last updated ${esc(LEGAL_UPDATED)}</p>
+    ${inner}
+    <div class="rule"></div><p class="small">Questions? Contact Propelr.in. This summary is provided in good faith; for a binding version have it reviewed by legal counsel in your jurisdiction.</p>
+  </div></div></main>`;
+}
+screens.terms = () => legalShell('Terms of Service', `
+  <p>SBDP ("the service") is provided by Propelr.in to help people record and split shared expenses. By using SBDP you agree to these terms.</p>
+  <h2>What SBDP does</h2>
+  <p>SBDP records expenses you enter and calculates balances and suggested settlements. It does not move money, make payments, or act as a bank, wallet, or payment processor. Any payment between people happens outside SBDP; marking a payment as recorded or confirmed is only a note that you made elsewhere.</p>
+  <h2>Your account</h2>
+  <p>You may use SBDP with a Google account or without an account (data kept only on your device). You are responsible for the accuracy of what you enter and for keeping your device and sign-in secure.</p>
+  <h2>Acceptable use</h2>
+  <ul><li>Enter only information you are entitled to share.</li><li>Do not use SBDP for unlawful purposes or to harass others.</li><li>Do not attempt to break, overload, or reverse-engineer the service.</li></ul>
+  <h2>Accuracy and disputes</h2>
+  <p>Balances are computed from the data group members enter. SBDP is not responsible for disagreements over amounts, who owes whom, or whether a real-world payment occurred. Resolve disputes directly with the people in your group.</p>
+  <h2>Availability</h2>
+  <p>The service is provided "as is" and "as available", without warranties of any kind. We may change or discontinue features. To the extent permitted by law, Propelr.in is not liable for indirect or consequential losses arising from use of SBDP.</p>
+  <h2>Changes</h2>
+  <p>We may update these terms. Continued use after an update means you accept the revised terms.</p>
+  <p><a class="link" href="#/privacy">Read the Privacy Policy →</a></p>`);
+screens.privacy = () => legalShell('Privacy Policy', `
+  <p>This policy explains what SBDP collects, why, and your choices.</p>
+  <h2>What we collect</h2>
+  <ul>
+    <li><strong>Account</strong>: if you sign in with Google, we receive your name, email, and profile photo to identify your account. We do not receive your Google password.</li>
+    <li><strong>Your content</strong>: groups, members, expenses, notes, tags, and settlements you enter.</li>
+    <li><strong>No account mode</strong>: if you choose "use without an account", your data stays only in your browser on this device and is not sent to our servers.</li>
+  </ul>
+  <h2>How it is used</h2>
+  <p>Your data is used only to run SBDP for you and the people in your groups - to show balances, suggested settlements, and shared statements. We do not sell your data or use it for advertising.</p>
+  <h2>Where it is stored</h2>
+  <p>When signed in, data is stored in our database provider (Supabase) and is visible only to members of the groups you belong to, enforced by row-level security. No-account data never leaves your device unless you export it yourself.</p>
+  <h2>Sharing</h2>
+  <p>Content you share (statements, invite links) is visible to anyone you send it to. Invite links can be set to expire. Audio notes and receipts are included only if you explicitly select them.</p>
+  <h2>Your choices</h2>
+  <ul><li>Use SBDP without an account to keep data on-device.</li><li>Export or delete your groups and expenses at any time.</li><li>Sign out to end your session on a device.</li></ul>
+  <h2>Retention</h2>
+  <p>We keep your data while your account is active. Deleting a group or expense removes it from the database. Contact Propelr.in to request deletion of your account data.</p>
+  <p><a class="link" href="#/terms">Read the Terms of Service →</a></p>`);
 
 // Invite-link landing. Cloud links carry ?token=; a signed-in user joins the
 // real group, a signed-out user is sent to Google first and joins on return.
@@ -1086,7 +1136,7 @@ screens.join = async (params) => {
   $('#joinlocal').onclick = () => { db.enableLocal(Local.loadLocal()); state.noAccount = true; go(g ? '#/group/' + legacyGid : '#/home'); };
 };
 
-// Review gallery (prototype tool — outside product UI)
+// Review gallery (prototype tool - outside product UI)
 screens.gallery = () => {
   const items = [
     ['Login', '#/login'], ['Login · cancelled', '#/login?state=cancelled'], ['Login · failed', '#/login?state=failed'], ['Login · expired', '#/login?state=expired'],
@@ -1098,7 +1148,7 @@ screens.gallery = () => {
   ];
   const langShots = [['Bengali dashboard', 'bn', '#/home'], ['Hindi expense form', 'hi', '#/add'], ['Tamil group', 'ta', '#/group/g_goa'], ['Malayalam settle', 'ml', '#/settle']];
   app.innerHTML = `<div class="gallery">${lockup(true)}
-    <div class="title mt"><div><h1>Prototype gallery</h1><p class="muted">Review tool — not part of the product UI. ${reviewBadge()}</p></div>
+    <div class="title mt"><div><h1>Prototype gallery</h1><p class="muted">Review tool - not part of the product UI. ${reviewBadge()}</p></div>
       <div class="row"><button class="btn secondary" id="tg">Toggle theme</button></div></div>
     <div class="gallery-grid">${items.map(([n, h]) => `<a class="gallery-item" href="${h}"><div class="round">${icon('arrowUpRight')}</div><h3>${esc(n)}</h3><div class="review">${esc(h)}</div></a>`).join('')}</div>
     <div class="section mt"><h2>Translated states</h2></div>
@@ -1119,7 +1169,7 @@ function router() {
   window.scrollTo(0, 0);
   // Auth gate: when real backend is configured, product routes require a session
   // unless the user explicitly chose no-account/local mode.
-  const publicRoutes = new Set(['login', 'language', 'gallery', 'join']);
+  const publicRoutes = new Set(['login', 'language', 'gallery', 'join', 'terms', 'privacy']);
   if (Auth.configured() && !Auth.isSignedIn() && !db.localMode && !publicRoutes.has(name)) {
     state.afterLogin = location.hash; return screens.login(params);
   }
@@ -1168,7 +1218,7 @@ document.addEventListener('click', (e) => {
 });
 
 // Offline/online: keep working, offer to save. Never block on connectivity.
-window.addEventListener('offline', () => { toast(t('offlineTitle') + ' — ' + t('offlineBody'), 4000); router(); });
+window.addEventListener('offline', () => { toast(t('offlineTitle') + ' - ' + t('offlineBody'), 4000); router(); });
 window.addEventListener('online', () => router());
 
 window.addEventListener('hashchange', router);
@@ -1190,10 +1240,22 @@ async function applyIdentity(u) {
   }
 }
 
+// Skeleton shown while a signed-in session loads its data from the backend.
+function showSkeleton() {
+  const line = (w) => `<div class="skel skel-line" style="width:${w}"></div>`;
+  app.innerHTML = `<main class="app"><div class="content">
+    <div style="display:grid;gap:12px;max-width:420px;margin-bottom:28px">${line('40%')}${line('65%')}</div>
+    <div class="grid"><div class="skel skel-block" style="height:120px"></div><div class="skel skel-block" style="height:120px"></div></div>
+    <div class="cols"><div class="skel skel-block" style="height:200px"></div><div class="skel skel-block" style="height:200px"></div></div>
+  </div></main>`;
+}
+
 async function boot() {
   applyTheme(getThemeMode());
   document.documentElement.lang = getLang();
   if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { if (getThemeMode() === 'system') applyTheme('system'); });
+  // Show a loading skeleton while we establish the session / load cloud data.
+  if (Auth.configured() && !location.hash.startsWith('#/login')) showSkeleton();
   // Establish a real session (and complete any Google OAuth redirect) before render.
   await Auth.init();
   const u = Auth.currentUser();
@@ -1205,7 +1267,10 @@ async function boot() {
   }
   Auth.onChange(async (user) => {
     if (user && !db.cloud) await applyIdentity(user);
-    else if (!user) db.resetEmpty();
+    // Only reset on an actual sign-out (we had a cloud session). A null INITIAL
+    // session must NOT wipe no-account/local mode.
+    else if (!user && db.cloud) db.resetEmpty();
+    else if (!user) return; // initial no-session event - leave local mode intact
     router();
   });
   if (u && (location.hash === '' || location.hash.startsWith('#/login'))) {

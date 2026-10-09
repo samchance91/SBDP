@@ -1,12 +1,12 @@
 // Data layer. Chooses a backend adapter at runtime:
 //  - SupabaseAdapter  when window.SBDP_ENV has a URL + anon key configured.
-//  - PreviewAdapter   otherwise — in-memory fixtures, clearly labelled review mode.
+//  - PreviewAdapter   otherwise - in-memory fixtures, clearly labelled review mode.
 // The two adapters share one async interface so screens never branch on backend.
 // A preview sign-in NEVER masquerades as real Google auth (see auth.mode).
 
 import { toPaise } from './money.js';
 
-// A fresh, empty personal account. New users start here — no demo groups, no
+// A fresh, empty personal account. New users start here - no demo groups, no
 // pre-seeded names. 'me' is the current user (renamed to the signed-in identity).
 export function personalEmpty(name = 'You') {
   const initials = (String(name || 'You').trim().split(/\s+/).map((s) => s[0]).join('').slice(0, 2) || 'YO').toUpperCase();
@@ -91,7 +91,7 @@ class PreviewAdapter {
   _persist() { if ((this.localMode || this._persistAlways) && this._onPersist) { try { this._onPersist(this.state); } catch {} } }
   auth() { return { mode: 'preview', user: null }; }
   async signInPreview() {
-    // Explicitly a SIMULATED session — never presented as real Google auth.
+    // Explicitly a SIMULATED session - never presented as real Google auth.
     this.state.session = { user: { id: 'u_sam', name: 'Sam', simulated: true }, simulated: true };
     return { simulated: true };
   }

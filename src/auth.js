@@ -1,7 +1,7 @@
 // Real authentication via Supabase Auth + Google OAuth.
 // Activates ONLY when window.SBDP_ENV is configured (url + anonKey). Without it
 // the app stays in preview mode and this module reports "not configured".
-// Account creation is automatic on first Google sign-in — no password is stored.
+// Account creation is automatic on first Google sign-in - no password is stored.
 
 const CDN = 'https://esm.sh/@supabase/supabase-js@2';
 

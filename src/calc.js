@@ -1,4 +1,4 @@
-// Safe calculator — tokenise + shunting-yard to RPN, evaluate numerically.
+// Safe calculator - tokenise + shunting-yard to RPN, evaluate numerically.
 // No eval / no Function. Percent is a postfix operator meaning "divide by 100".
 // Precision: intermediate math in JS numbers; callers round to paise on insert.
 

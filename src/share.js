@@ -1,7 +1,7 @@
 // Sharing helpers. Uses the native Web Share sheet where available and sensible
 // fallbacks (WhatsApp/Telegram/Email deep links, clipboard) elsewhere. The OS and
 // browser decide which app targets exist; we never claim every installed app.
-// Cancelling a share is a normal outcome — never surfaced as an error or "sent".
+// Cancelling a share is a normal outcome - never surfaced as an error or "sent".
 
 export function canNativeShare(data) {
   if (typeof navigator === 'undefined' || !navigator.share) return false;

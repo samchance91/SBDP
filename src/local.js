@@ -29,9 +29,9 @@ function inr(p) { const n = Math.abs(p); return `₹${(n / 100).toLocaleString('
 export function toMarkdown(state) {
   const m = (id) => (state.members.find((x) => x.id === id) || {}).name || id;
   const lines = [];
-  lines.push('# SBDP — saved session');
+  lines.push('# SBDP - saved session');
   lines.push('');
-  lines.push(`_Split Bills, Divide Payments. by Propelr.in — exported ${new Date().toLocaleString('en-IN')}_`);
+  lines.push(`_Split Bills, Divide Payments. by Propelr.in - exported ${new Date().toLocaleString('en-IN')}_`);
   lines.push('');
   lines.push('> Local, no-account copy. Import this file in SBDP (Settings → Restore) to continue. Amounts are INR.');
   lines.push('');
